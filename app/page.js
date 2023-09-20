@@ -1,95 +1,67 @@
-import Image from 'next/image'
-import styles from './page.module.css'
+import {
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Flex,
+  Text
+} from '@chakra-ui/react';
+
+import { RedeemBox } from './components/RedeemBox';
+import { WithdrawCollateral } from './components/WithdrawCollateral';
+import { ArrowRightCircle } from 'lucide-react';
 
 export default function Home() {
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>app/page.js</code>
-        </p>
-        <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+    <Flex direction='column'>
+      <Flex direction='column' my='2rem'>
+        <Text fontSize={{ lg: '28px', sm: '18px' }} mb='1rem'>
+          Global Settlement
+        </Text>
+        <Text fontSize={{ lg: '16px', sm: '14px' }} maxW='800px' opacity='0.7'>
+          In case of an emergency protocol shutdown, you can withdraw any excess
+          collateral & redeem system coins below.
+        </Text>
+      </Flex>
 
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+      <Tabs
+        variant='unstyled'
+        display='flex'
+        flexDirection='row'
+        alignItems='center'
+        justifyContent='center'
+        my='2rem'
+        isFitted
+      >
+        <TabList display='flex' flexDirection='column' w='50%' minH='350px'>
+          <Tab _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }} h='150px'>
+            <Text mr='1rem'> Withdraw Collateral</Text>
+            <ArrowRightCircle />
+          </Tab>
+          <Tab _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }} h='150px'>
+            <Text mr='1rem'>Redeem System Coins </Text>
+            <ArrowRightCircle />
+          </Tab>
+        </TabList>
 
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
+        <TabPanels
+          minH='350px'
+          display='flex'
+          flexDirection='column'
+          alignItems='center'
+          justifyContent='center'
+          border='2px solid rgb(5, 25, 46)'
+          bg='rgb(5, 25, 46)'
         >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore the Next.js 13 playground.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+          <TabPanel>
+            <WithdrawCollateral />
+          </TabPanel>
+          <TabPanel>
+            <RedeemBox />
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Flex>
+  );
 }
