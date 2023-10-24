@@ -9,38 +9,20 @@ import {
   NumberInputField,
   Button
 } from '@chakra-ui/react';
-import { useBalance, useAccount, useNetwork } from 'wagmi';
+import { useAccount, useNetwork } from 'wagmi';
 import { useState } from 'react';
-import { ArrowUpDown } from 'lucide-react';
 
 import { tokenTickers } from '@/app/utils/contracts';
 
-import RaiAbi from '../utils/raiAbi.json';
-import { RAI_CONTRACT_ADDRESS } from '../utils/contracts';
-
-export const RedeemBox = () => {
+export const RedeemBox = ({
+  systemCoinBalance,
+  collateralBalance,
+  systemCoinAddress
+}) => {
   const [tokenInput, setTokenInput] = useState(0);
 
   const { address } = useAccount();
   const { chain } = useNetwork();
-
-  const contractAddress = RAI_CONTRACT_ADDRESS?.[chain?.id];
-
-  const getRaiBalance = useBalance({
-    address,
-    enabled: contractAddress?.length !== 0,
-    token: contractAddress,
-    watch: true
-  });
-
-  const getCollateralBalance = useBalance({
-    address,
-    enabled: contractAddress?.length !== 0,
-    watch: true
-  });
-
-  const raiBalance = getRaiBalance.data?.formatted || '0';
-  const collateralBalance = getCollateralBalance.data?.formatted || '0';
 
   return (
     <Flex
@@ -60,7 +42,7 @@ export const RedeemBox = () => {
             {new Intl.NumberFormat('en-US', {
               style: 'decimal',
               minimumFractionDigits: 0
-            }).format(Number(raiBalance))}
+            }).format(Number(systemCoinBalance))}
           </Text>
         </HStack>
         <HStack>
@@ -113,7 +95,7 @@ export const RedeemBox = () => {
         </HStack>
       </Box>
 
-      {chain?.id in RAI_CONTRACT_ADDRESS ? (
+      {chain?.id in systemCoinAddress ? (
         <Button
           mt='1rem'
           bg='white'

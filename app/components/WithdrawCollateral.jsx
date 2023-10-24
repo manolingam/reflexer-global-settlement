@@ -9,37 +9,19 @@ import {
   NumberInputField,
   Button
 } from '@chakra-ui/react';
-import { useBalance, useAccount, useNetwork } from 'wagmi';
+import { useAccount, useNetwork } from 'wagmi';
 import { useState } from 'react';
 
 import { tokenTickers } from '@/app/utils/contracts';
 
-import RaiAbi from '../utils/raiAbi.json';
-import { RAI_CONTRACT_ADDRESS } from '../utils/contracts';
-
-export const WithdrawCollateral = () => {
+export const WithdrawCollateral = ({
+  collateralBalance,
+  systemCoinAddress
+}) => {
   const [tokenInput, setTokenInput] = useState(0);
 
   const { address } = useAccount();
   const { chain } = useNetwork();
-
-  const contractAddress = RAI_CONTRACT_ADDRESS?.[chain?.id];
-
-  const getRaiBalance = useBalance({
-    address,
-    enabled: contractAddress?.length !== 0,
-    token: contractAddress,
-    watch: true
-  });
-
-  const getCollateralBalance = useBalance({
-    address,
-    enabled: contractAddress?.length !== 0,
-    watch: true
-  });
-
-  const raiBalance = getRaiBalance.data?.formatted || '0';
-  const collateralBalance = getCollateralBalance.data?.formatted || '0';
 
   return (
     <Flex
@@ -82,7 +64,7 @@ export const WithdrawCollateral = () => {
         </HStack>
       </Box>
 
-      {chain?.id in RAI_CONTRACT_ADDRESS ? (
+      {chain?.id in systemCoinAddress ? (
         <Button
           mt='1rem'
           bg='white'

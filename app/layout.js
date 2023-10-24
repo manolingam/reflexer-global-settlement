@@ -19,7 +19,7 @@ import { Providers } from './providers';
 
 const poppins = Poppins({ subsets: ['latin'], weight: '500' });
 
-const chains = [mainnet, sepolia];
+const chains = [sepolia];
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_ID;
 
 const { publicClient } = configureChains(chains, [w3mProvider({ projectId })]);
@@ -36,7 +36,7 @@ export default function RootLayout({ children }) {
       <body className={poppins.className}>
         <Providers>
           <WagmiConfig config={wagmiConfig}>
-            <Box>
+            <Box bg='black'>
               <Flex
                 direction='column'
                 maxW='90rem'
@@ -44,6 +44,8 @@ export default function RootLayout({ children }) {
                 mx='auto'
                 pt='2rem'
                 px={{ lg: '4rem', sm: '2rem' }}
+                bg='black'
+                color='white'
               >
                 <Header />
                 {children}

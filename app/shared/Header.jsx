@@ -15,7 +15,7 @@ export const Header = () => {
       mb='2rem'
     >
       <ChakraImage
-        src='/brand-color.webp'
+        src='/brand-white.png'
         alt='Reflexer Finance'
         w={{ lg: '200px', sm: '100px' }}
         cursor='pointer'
