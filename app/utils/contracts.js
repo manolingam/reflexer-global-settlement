@@ -39,6 +39,10 @@ export const GEB_SAFE_ENGINE_ADDRESS = {
   11155111: '0x687538a189Ed19B0F93901AC61033492c1B931Fa'
 };
 
+export const COLLATERAL_JOIN_ADDRESS = {
+  11155111: '0x1c62F6127a37D98DD41Ea4578376B5a25d089FfC'
+};
+
 export const blockExplorerBaseUrl = {
   1: 'https://etherscan.io',
   11155111: 'https://sepolia.etherscan.io'

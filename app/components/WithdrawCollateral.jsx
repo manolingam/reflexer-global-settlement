@@ -16,7 +16,8 @@ import { tokenTickers } from '@/app/utils/contracts';
 
 export const WithdrawCollateral = ({
   collateralBalance,
-  systemCoinAddress
+  systemCoinAddress,
+  proxiedCollateralWithdraw
 }) => {
   const [tokenInput, setTokenInput] = useState(0);
 
@@ -69,10 +70,11 @@ export const WithdrawCollateral = ({
           mt='1rem'
           bg='white'
           loadingText={'Transaction pending..'}
-          isDisabled={true}
+          // isDisabled={true}
           _hover={{
             opacity: 0.7
           }}
+          onClick={() => proxiedCollateralWithdraw(1, 100)}
         >
           Withdraw
         </Button>

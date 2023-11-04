@@ -39,15 +39,14 @@ export default function Home() {
 
   const {
     getSafe,
-
     safeOwner,
     collateralType,
     safe,
     proxyAddress,
-    shutdownTime
+    shutdownTime,
+    safeAddress,
+    proxiedCollateralWithdraw
   } = useGeb();
-
-  useEffect(() => {});
 
   return (
     <Flex direction='column'>
@@ -215,6 +214,7 @@ export default function Home() {
                     <WithdrawCollateral
                       systemCoinAddress={SYSTEM_COIN_ADDRESS}
                       collateralBalance={safe && formatEther(safe[0])}
+                      proxiedCollateralWithdraw={proxiedCollateralWithdraw}
                     />
                   </TabPanel>
                   <TabPanel>
