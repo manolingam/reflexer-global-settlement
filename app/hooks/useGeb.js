@@ -5,13 +5,13 @@ import {
   usePublicClient
 } from 'wagmi';
 
-import { encodeFunctionData } from 'viem';
+import { encodeFunctionData, parseAbi } from 'viem';
 
-import { ZeroAddress, Contract } from 'ethers';
+import { ZeroAddress } from 'ethers';
 
 import { useEffect, useState } from 'react';
 
-import { useEthersSigner } from './useEthersClient';
+// import { useEthersSigner } from './useEthersClient';
 
 import {
   // SYSTEM_COIN_ADDRESS,
@@ -20,22 +20,22 @@ import {
   GEB_PROXY_REGISTRY_ADDRESS,
   GEB_SAFE_MANAGER_ADDRESS,
   GEB_SAFE_ENGINE_ADDRESS,
-  GEB_PROXY_ACTIONS_ADDRESS,
-  COLLATERAL_JOIN_ADDRESS
+  COLLATERAL_JOIN_ADDRESS,
+  GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ADDRESS
 } from '../utils/contracts';
 
 import GLOBAL_SETTLEMENT_ABI from '../abis/GlobalSettlement.json';
 import GEB_PROXY_REGISTRY_ABI from '../abis/GebProxyRegistry.json';
 import GEB_SAFE_MANAGER_ABI from '../abis/GebSafeManager.json';
 import GEB_SAFE_ENGINE_ABI from '../abis/GebSafeEngine.json';
-import GEB_PROXY_ACTIONS_ABI from '../abis/GebProxyActions.json';
+import GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI from '../abis/GebProxyActionsGlobalSettlement.json';
 
 export const useGeb = () => {
   const { chain } = useNetwork();
   const { address } = useAccount();
 
   const publicClient = usePublicClient({ chainId: chain?.id });
-  const ethersSigner = useEthersSigner({ chainId: chain?.id });
+  // const ethersSigner = useEthersSigner({ chainId: chain?.id });
 
   const [shutdownTime, setShutdownTime] = useState(0);
 
@@ -51,23 +51,15 @@ export const useGeb = () => {
   const gebProxyRegistryContract = GEB_PROXY_REGISTRY_ADDRESS?.[chain?.id];
   const gebSafeManagerContract = GEB_SAFE_MANAGER_ADDRESS?.[chain?.id];
   const gebSafeEngineContract = GEB_SAFE_ENGINE_ADDRESS?.[chain?.id];
-  const gebProxyActionsContract = GEB_PROXY_ACTIONS_ADDRESS?.[chain?.id];
+  const GebProxyActionsGlobalSettlementContract =
+    GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ADDRESS?.[chain?.id];
   const collateralJoinAddress = COLLATERAL_JOIN_ADDRESS?.[chain?.id];
 
-  const { write } = useContractWrite({
+  const { write: executeAsProxy } = useContractWrite({
     address: proxyAddress,
-    abi: [
-      {
-        inputs: [
-          { internalType: 'address', name: '_target', type: 'address' },
-          { internalType: 'bytes', name: '_data', type: 'bytes' }
-        ],
-        name: 'execute',
-        outputs: [{ internalType: 'bytes', name: 'response', type: 'bytes' }],
-        stateMutability: 'payable',
-        type: 'function'
-      }
-    ],
+    abi: parseAbi([
+      'function execute(address _target, bytes _data) public payable returns (bytes response)'
+    ]),
     functionName: 'execute',
     args: []
   });
@@ -145,34 +137,20 @@ export const useGeb = () => {
     setCollateralType(data);
   };
 
-  const proxiedCollateralWithdraw = async (_safeId, _amount) => {
+  const proxiedCollateralWithdraw = async _safeId => {
     try {
       const data = encodeFunctionData({
-        abi: GEB_PROXY_ACTIONS_ABI,
+        abi: GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI,
         functionName: 'freeTokenCollateral',
-        args: [gebSafeManagerContract, collateralJoinAddress, _safeId, _amount]
+        args: [
+          gebSafeManagerContract,
+          collateralJoinAddress,
+          globalSettlementContract,
+          _safeId
+        ]
       });
 
-      const contract = new Contract(
-        proxyAddress,
-        [
-          {
-            inputs: [
-              { internalType: 'address', name: '_target', type: 'address' },
-              { internalType: 'bytes', name: '_data', type: 'bytes' }
-            ],
-            name: 'execute',
-            outputs: [
-              { internalType: 'bytes', name: 'response', type: 'bytes' }
-            ],
-            stateMutability: 'payable',
-            type: 'function'
-          }
-        ],
-        ethersSigner
-      );
-
-      return contract.execute(gebProxyActionsContract, data);
+      return executeAsProxy(GebProxyActionsGlobalSettlementContract, data);
     } catch (err) {
       console.log(err);
     }
