@@ -1,17 +1,22 @@
 import {
   useAccount,
+  useBalance,
+  useContractRead,
   useNetwork,
-  useContractWrite,
-  usePublicClient
+  usePublicClient,
+  useWalletClient
 } from 'wagmi';
 
-import { encodeFunctionData } from 'viem';
+import {
+  encodeFunctionData,
+  formatEther,
+  formatUnits,
+  parseAbi,
+  parseEther,
+  zeroAddress
+} from 'viem';
 
-import { ZeroAddress, Contract } from 'ethers';
-
-import { useEffect, useState } from 'react';
-
-import { useEthersSigner } from './useEthersClient';
+import { useState } from 'react';
 
 import {
   // SYSTEM_COIN_ADDRESS,
@@ -20,205 +25,320 @@ import {
   GEB_PROXY_REGISTRY_ADDRESS,
   GEB_SAFE_MANAGER_ADDRESS,
   GEB_SAFE_ENGINE_ADDRESS,
-  GEB_PROXY_ACTIONS_ADDRESS,
-  COLLATERAL_JOIN_ADDRESS
+  COLLATERAL_JOIN_ADDRESS,
+  GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ADDRESS,
+  COIN_JOIN_ADDRESS,
+  SYSTEM_COIN_ADDRESS,
+  COLLATERAL_ADDRESS
 } from '../utils/contracts';
 
 import GLOBAL_SETTLEMENT_ABI from '../abis/GlobalSettlement.json';
 import GEB_PROXY_REGISTRY_ABI from '../abis/GebProxyRegistry.json';
 import GEB_SAFE_MANAGER_ABI from '../abis/GebSafeManager.json';
 import GEB_SAFE_ENGINE_ABI from '../abis/GebSafeEngine.json';
-import GEB_PROXY_ACTIONS_ABI from '../abis/GebProxyActions.json';
+import GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI from '../abis/GebProxyActionsGlobalSettlement.json';
 
 export const useGeb = () => {
   const { chain } = useNetwork();
   const { address } = useAccount();
 
   const publicClient = usePublicClient({ chainId: chain?.id });
-  const ethersSigner = useEthersSigner({ chainId: chain?.id });
+  const { data: walletClient } = useWalletClient();
 
-  const [shutdownTime, setShutdownTime] = useState(0);
+  const [safeOwner, setSafeOwner] = useState(zeroAddress);
+  const [safeAddress, setSafeAddress] = useState(zeroAddress);
 
-  const [proxyAddress, setProxyAddress] = useState(ZeroAddress);
-  const [safeOwner, setSafeOwner] = useState(ZeroAddress);
-  const [safeAddress, setSafeAddress] = useState(ZeroAddress);
-  const [collateralType, setCollateralType] = useState('');
-  const [safe, setSafe] = useState([0, 0]);
+  const [selectedSafeId, setSelectedSafeId] = useState(null);
 
-  // const systemcoinContract = SYSTEM_COIN_ADDRESS?.[chain?.id];
-  // const collateralContract = COLLATERAL_ADDRESS?.[chain?.id];
+  const systemcoinContract = SYSTEM_COIN_ADDRESS?.[chain?.id];
+  const collateralContract = COLLATERAL_ADDRESS?.[chain?.id];
   const globalSettlementContract = GLOBAL_SETTLEMENT_ADDRESS?.[chain?.id];
   const gebProxyRegistryContract = GEB_PROXY_REGISTRY_ADDRESS?.[chain?.id];
   const gebSafeManagerContract = GEB_SAFE_MANAGER_ADDRESS?.[chain?.id];
   const gebSafeEngineContract = GEB_SAFE_ENGINE_ADDRESS?.[chain?.id];
-  const gebProxyActionsContract = GEB_PROXY_ACTIONS_ADDRESS?.[chain?.id];
+  const gebProxyActionsGlobalSettlementContract =
+    GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ADDRESS?.[chain?.id];
   const collateralJoinAddress = COLLATERAL_JOIN_ADDRESS?.[chain?.id];
+  const coinJoinAddress = COIN_JOIN_ADDRESS?.[chain?.id];
 
-  const { write } = useContractWrite({
-    address: proxyAddress,
-    abi: [
-      {
-        inputs: [
-          { internalType: 'address', name: '_target', type: 'address' },
-          { internalType: 'bytes', name: '_data', type: 'bytes' }
-        ],
-        name: 'execute',
-        outputs: [{ internalType: 'bytes', name: 'response', type: 'bytes' }],
-        stateMutability: 'payable',
-        type: 'function'
-      }
-    ],
-    functionName: 'execute',
-    args: []
+  const executeAsProxy = async (target, data) => {
+    const txHash = await walletClient.writeContract({
+      account: address,
+      address: proxyAddress,
+      abi: parseAbi([
+        'function execute(address _target, bytes _data) public payable returns (bytes response)'
+      ]),
+      functionName: 'execute',
+      args: [target, data]
+    });
+
+    return txHash;
+  };
+
+  const updateSafeId = async (_safeId) => {
+    if (Number.isNaN(_safeId)) {
+      return;
+    }
+    try {
+      setSelectedSafeId(Number(_safeId));
+
+      const safeOwner = await publicClient.readContract({
+        address: gebSafeManagerContract,
+        abi: GEB_SAFE_MANAGER_ABI,
+        functionName: 'ownsSAFE',
+        args: [_safeId]
+      });
+      setSafeOwner(safeOwner);
+
+      const safeAddress = await publicClient.readContract({
+        address: gebSafeManagerContract,
+        abi: GEB_SAFE_MANAGER_ABI,
+        functionName: 'safes',
+        args: [_safeId]
+      });
+      setSafeAddress(safeAddress);
+    } catch (err) {
+      console.log('Error in updateSafeId', err);
+      setSafeOwner(zeroAddress);
+      setSafeAddress(zeroAddress);
+      setSelectedSafeId(null);
+    }
+  };
+
+  const getProxyAddress = useContractRead({
+    address: gebProxyRegistryContract,
+    abi: GEB_PROXY_REGISTRY_ABI,
+    functionName: 'proxies',
+    args: [address],
+    watch: true,
+    enabled: !!address
   });
 
-  const getSafe = async (_collateralType, _safeId) => {
-    const safeOwner = await publicClient.readContract({
-      address: gebSafeManagerContract,
-      abi: GEB_SAFE_MANAGER_ABI,
-      functionName: 'ownsSAFE',
-      args: [_safeId]
-    });
+  const proxyAddress = getProxyAddress.data || zeroAddress;
 
-    setSafeOwner(safeOwner);
+  const getCollateralType = useContractRead({
+    address: gebSafeManagerContract,
+    abi: GEB_SAFE_MANAGER_ABI,
+    functionName: 'collateralTypes',
+    args: [1],
+    watch: true
+  });
 
-    const safeAddress = await publicClient.readContract({
-      address: gebSafeManagerContract,
-      abi: GEB_SAFE_MANAGER_ABI,
-      functionName: 'safes',
-      args: [_safeId]
-    });
+  const collateralType = getCollateralType.data || '';
 
-    setSafeAddress(safeAddress);
+  const getSafeAmounts = useContractRead({
+    address: gebSafeEngineContract,
+    abi: GEB_SAFE_ENGINE_ABI,
+    functionName: 'safes',
+    args: [collateralType, safeAddress],
+    watch: true,
+    enabled: !!collateralType && !!safeAddress
+  });
 
-    const data = await publicClient.readContract({
-      address: gebSafeEngineContract,
-      abi: GEB_SAFE_ENGINE_ABI,
-      functionName: 'safes',
-      args: [_collateralType, safeAddress]
-    });
+  const [lockedCollateralAmount, generatedDebtAmount] = getSafeAmounts.data
+    ? getSafeAmounts.data.map((d) => formatEther(d))
+    : ['0', '0'];
 
-    setSafe(data);
-  };
+  const getShutdownTime = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'shutdownTime',
+    watch: true
+  });
 
-  // ------------------------------
+  const shutdownTime = BigInt(getShutdownTime.data || 0);
 
-  const getCollateralType = async () => {
-    const data = await publicClient.readContract({
-      address: gebSafeManagerContract,
-      abi: GEB_SAFE_MANAGER_ABI,
-      functionName: 'collateralTypes',
-      args: [1]
-    });
+  const getApprovedSystemCoin = useContractRead({
+    address: systemcoinContract,
+    abi: parseAbi([
+      'function allowance(address _owner, address _spender) public view returns (uint256)'
+    ]),
+    functionName: 'allowance',
+    args: [address, proxyAddress],
+    watch: true
+  });
 
-    setCollateralType(data);
-  };
+  const approvedSystemCoin = getApprovedSystemCoin.data
+    ? formatEther(getApprovedSystemCoin.data)
+    : '0';
 
-  const getProxyAddress = async () => {
-    const data = await publicClient.readContract({
-      address: gebProxyRegistryContract,
-      abi: GEB_PROXY_REGISTRY_ABI,
-      functionName: 'proxies',
-      args: [address]
-    });
+  const getSystemCoinBalance = useBalance({
+    address,
+    enabled: systemcoinContract?.length !== 0,
+    token: systemcoinContract,
+    watch: true
+  });
 
-    setProxyAddress(data);
-  };
+  const systemCoinBalance = getSystemCoinBalance.data?.formatted || '0';
 
-  const getShutdownTime = async () => {
-    const data = await publicClient.readContract({
-      address: globalSettlementContract,
-      abi: GLOBAL_SETTLEMENT_ABI,
-      functionName: 'shutdownTime'
-    });
+  const getCollateralBalance = useBalance({
+    address,
+    enabled: collateralContract?.length !== 0,
+    token: collateralContract,
+    watch: true
+  });
 
-    setShutdownTime(data);
-  };
+  const collateralBalance = getCollateralBalance.data?.formatted || '0';
 
-  const getGlobalDebt = async () => {
-    const data = await publicClient.readContract({
-      address: gebSafeEngineContract,
-      abi: GEB_SAFE_ENGINE_ABI,
-      functionName: 'globalDebt'
-    });
+  const getCoinBagBalance = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'coinBag',
+    args: [proxyAddress],
+    watch: true
+  });
 
-    setCollateralType(data);
-  };
+  const coinBagBalance = getCoinBagBalance.data
+    ? formatEther(getCoinBagBalance.data)
+    : '0';
 
-  const proxiedCollateralWithdraw = async (_safeId, _amount) => {
+  const getCoinsUsedToRedeem = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'coinsUsedToRedeem',
+    args: [collateralType, proxyAddress],
+    watch: true
+  });
+
+  const coinsUsedToRedeem = getCoinsUsedToRedeem.data
+    ? formatEther(getCoinsUsedToRedeem.data)
+    : '0';
+
+  const redeemableCoinBalance = (
+    Number(coinBagBalance) - Number(coinsUsedToRedeem)
+  ).toString();
+
+  const getCollateralCashPrice = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'collateralCashPrice',
+    args: [collateralType],
+    watch: true
+  });
+
+  const collateralCashPrice = formatUnits(
+    getCollateralCashPrice.data ? getCollateralCashPrice.data : BigInt(0),
+    27
+  );
+
+  const getOutstandingCoinSupply = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'outstandingCoinSupply',
+    watch: true
+  });
+
+  const outstandingCoinSupply = getOutstandingCoinSupply.data
+    ? formatEther(getOutstandingCoinSupply.data)
+    : '0';
+
+  const proxiedCollateralWithdraw = async () => {
     try {
+      if (!selectedSafeId) {
+        throw new Error('No safe selected');
+      }
+
       const data = encodeFunctionData({
-        abi: GEB_PROXY_ACTIONS_ABI,
+        abi: GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI,
         functionName: 'freeTokenCollateral',
-        args: [gebSafeManagerContract, collateralJoinAddress, _safeId, _amount]
+        args: [
+          gebSafeManagerContract,
+          collateralJoinAddress,
+          globalSettlementContract,
+          selectedSafeId
+        ]
       });
 
-      const contract = new Contract(
-        proxyAddress,
-        [
-          {
-            inputs: [
-              { internalType: 'address', name: '_target', type: 'address' },
-              { internalType: 'bytes', name: '_data', type: 'bytes' }
-            ],
-            name: 'execute',
-            outputs: [
-              { internalType: 'bytes', name: 'response', type: 'bytes' }
-            ],
-            stateMutability: 'payable',
-            type: 'function'
-          }
-        ],
-        ethersSigner
-      );
-
-      return contract.execute(gebProxyActionsContract, data);
+      return executeAsProxy(gebProxyActionsGlobalSettlementContract, data);
     } catch (err) {
-      console.log(err);
+      console.log('Error in proxiedCollateralWithdraw', err);
     }
   };
 
-  useEffect(() => {
-    if (chain?.id) {
-      getShutdownTime();
-      getCollateralType();
-      getProxyAddress();
+  const proxiedPrepareSystemCoins = async (amount) => {
+    try {
+
+      if (amount > systemCoinBalance) {
+        throw new Error('Not enough system coins');
+      }
+
+
+      const amountInWei = parseEther(amount);
+
+      const data = encodeFunctionData({
+        abi: GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI,
+        functionName: 'prepareCoinsForRedeeming',
+        args: [coinJoinAddress, globalSettlementContract, amountInWei]
+      });
+
+      return executeAsProxy(gebProxyActionsGlobalSettlementContract, data);
+    } catch (err) {
+      console.log('Error in proxiedPrepareSystemCoins', err);
     }
-  }, [chain]);
+  };
 
-  useEffect(() => {
-    if (address) {
-      getShutdownTime();
-      getCollateralType();
-      getProxyAddress();
+  const proxiedRedeemSystemCoins = async (amount) => {
+    try {
+
+      if (amount > redeemableCoinBalance) {
+        throw new Error('Not enough redeemable coins');
+      }
+
+      const amountInWei = parseEther(amount);
+
+      const data = encodeFunctionData({
+        abi: GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI,
+        functionName: 'redeemTokenCollateral',
+        args: [
+          collateralJoinAddress,
+          globalSettlementContract,
+          collateralType,
+          amountInWei
+        ]
+      });
+
+      return executeAsProxy(gebProxyActionsGlobalSettlementContract, data);
+    } catch (err) {
+      console.log('Error in proxiedRedeemSystemCoins', err);
     }
-  }, [address]);
+  };
 
-  // const getSystemCoinBalance = useBalance({
-  //   address,
-  //   enabled: systemcoinContract?.length !== 0,
-  //   token: systemcoinContract,
-  //   watch: true
-  // });
+  const approveSystemCoin = async (amount) => {
+    try {
+      const amountInWei = parseEther(amount);
 
-  // const getCollateralBalance = useBalance({
-  //   address,
-  //   enabled: collateralContract?.length !== 0,
-  //   token: collateralContract,
-  //   watch: true
-  // });
-
-  // const systemCoinBalance = getSystemCoinBalance.data?.formatted || '0';
-  // const collateralBalance = getCollateralBalance.data?.formatted || '0';
+      return walletClient.writeContract({
+        account: address,
+        address: systemcoinContract,
+        abi: parseAbi([
+          'function approve(address _spender, uint256 _amount) public returns (bool)'
+        ]),
+        functionName: 'approve',
+        args: [proxyAddress, amountInWei]
+      });
+    } catch (err) {
+      console.log('Error in proxiedApproveToken', err);
+    }
+  };
 
   return {
-    getSafe,
+    updateSafeId,
     safeAddress,
     safeOwner,
     collateralType,
-    safe,
+    lockedCollateralAmount,
+    generatedDebtAmount,
     proxyAddress,
     shutdownTime,
-    proxiedCollateralWithdraw
+    proxiedCollateralWithdraw,
+    proxiedPrepareSystemCoins,
+    proxiedRedeemSystemCoins,
+    approveSystemCoin,
+    systemCoinBalance,
+    collateralBalance,
+    redeemableCoinBalance,
+    approvedSystemCoin,
+    collateralCashPrice,
+    outstandingCoinSupply
   };
 };
