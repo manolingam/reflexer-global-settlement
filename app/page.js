@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 import {
   Tabs,
@@ -16,13 +16,12 @@ import {
   InputGroup,
   InputLeftAddon,
   Button,
-  Link as ChakraLink
+  VStack
 } from '@chakra-ui/react';
 
-import { ArrowRightCircle, ExternalLink } from 'lucide-react';
+import { ArrowRightCircle } from 'lucide-react';
 
 import { useNetwork } from 'wagmi';
-import { formatEther } from 'viem';
 
 import { SYSTEM_COIN_ADDRESS, blockExplorerBaseUrl } from './utils/contracts';
 import { getAccountString } from './utils/helpers';
@@ -31,6 +30,8 @@ import { RedeemBox } from './components/RedeemBox';
 import { WithdrawCollateral } from './components/WithdrawCollateral';
 
 import { useGeb } from './hooks/useGeb';
+import { BalanceDisplay } from './components/BalanceDisplay';
+import { tokenTickers } from '@/app/utils/contracts';
 
 export default function Home() {
   const { chain } = useNetwork();
@@ -38,14 +39,22 @@ export default function Home() {
   const [safeId, setSafeId] = useState(0);
 
   const {
-    getSafe,
+    updateSafeId,
     safeOwner,
-    collateralType,
-    safe,
+    lockedCollateralAmount,
+    generatedDebtAmount,
     proxyAddress,
     shutdownTime,
-    safeAddress,
-    proxiedCollateralWithdraw
+    proxiedCollateralWithdraw,
+    proxiedPrepareSystemCoins,
+    proxiedRedeemSystemCoins,
+    approveSystemCoin,
+    approvedSystemCoin,
+    systemCoinBalance,
+    collateralBalance,
+    redeemableCoinBalance,
+    collateralCashPrice,
+    outstandingCoinSupply
   } = useGeb();
 
   return (
@@ -131,7 +140,7 @@ export default function Home() {
           <>
             {shutdownTime > 0 && (
               <Flex mt='2rem' alignItems='baseline'>
-                <HStack w='400px'>
+                <HStack w='400px' spacing={5}>
                   <InputGroup>
                     <InputLeftAddon
                       children='SAFE ID'
@@ -148,9 +157,10 @@ export default function Home() {
                     color='black'
                     fontWeight='light'
                     _hover={{ opacity: 0.7 }}
-                    onClick={async () => {
-                      await getSafe(collateralType, safeId);
+                    onClick={() => {
+                      updateSafeId(safeId);
                     }}
+                    px='2rem'
                   >
                     Search
                   </Button>
@@ -170,62 +180,135 @@ export default function Home() {
             )}
 
             {shutdownTime > 0 && proxyAddress === safeOwner && (
-              <Tabs
-                variant='unstyled'
-                display='flex'
-                flexDirection='row'
-                alignItems='center'
-                justifyContent='center'
-                my='2rem'
-                isFitted
-              >
-                <TabList
+              <>
+                <SimpleGrid columns='3' gap='5' mb='2rem' mt='3rem'>
+                  <VStack spacing={4} mb={4} align='stretch'>
+                    <BalanceDisplay
+                      amount={collateralBalance}
+                      label='Collateral Balance'
+                      symbol={tokenTickers[chain?.id]?.collateral}
+                      borderColor='#41c1d0'
+                    />
+                    <BalanceDisplay
+                      amount={systemCoinBalance}
+                      label='System Coin Balance'
+                      symbol={tokenTickers[chain?.id]?.systemcoin}
+                      borderColor='#41c1d0'
+                    />
+                    <BalanceDisplay
+                      amount={redeemableCoinBalance}
+                      label='Redeemable Coin Balance'
+                      symbol={tokenTickers[chain?.id]?.systemcoin}
+                      borderColor='#41c1d0'
+                    />
+                  </VStack>
+                  <VStack spacing={4} mb={4} align='stretch'>
+                    <BalanceDisplay
+                      amount={lockedCollateralAmount}
+                      label='Locked Collateral'
+                      symbol={tokenTickers[chain?.id]?.collateral}
+                      borderColor='#41c1d0'
+                    />
+                    <BalanceDisplay
+                      amount={approvedSystemCoin}
+                      label='Approved System Coin'
+                      symbol={tokenTickers[chain?.id]?.systemcoin}
+                      borderColor='#41c1d0'
+                    />
+                    <BalanceDisplay
+                      amount={generatedDebtAmount}
+                      label='Generated Debt'
+                      symbol={tokenTickers[chain?.id]?.systemcoin}
+                      borderColor='#41c1d0'
+                    />
+                  </VStack>
+                  <VStack spacing={4} mb={4} align='stretch'>
+                    <BalanceDisplay
+                      amount={outstandingCoinSupply}
+                      label={
+                        outstandingCoinSupply === '0'
+                          ? 'Outstanding Coin Supply (not set)'
+                          : 'Outstanding Coin Supply'
+                      }
+                      symbol={tokenTickers[chain?.id]?.systemcoin}
+                      borderColor='#41c1d0'
+                    />
+                    <BalanceDisplay
+                      amount={collateralCashPrice}
+                      label={
+                        collateralCashPrice === '0'
+                          ? 'Collateral Cash Price (not set)'
+                          : 'Collateral Cash Price'
+                      }
+                      symbol={
+                        tokenTickers[chain?.id]?.collateral +
+                        '/' +
+                        tokenTickers[chain?.id]?.systemcoin
+                      }
+                      borderColor='#41c1d0'
+                    />
+                  </VStack>
+                </SimpleGrid>
+                <Tabs
+                  variant='unstyled'
                   display='flex'
-                  flexDirection='column'
-                  w='50%'
-                  minH='350px'
-                >
-                  <Tab
-                    _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }}
-                    h='150px'
-                  >
-                    <Text mr='1rem'> Withdraw Collateral from Safe</Text>
-                    <ArrowRightCircle />
-                  </Tab>
-                  <Tab
-                    _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }}
-                    h='150px'
-                  >
-                    <Text mr='1rem'>Redeem System Coins from Safe</Text>
-                    <ArrowRightCircle />
-                  </Tab>
-                </TabList>
-
-                <TabPanels
-                  minH='350px'
-                  display='flex'
-                  flexDirection='column'
-                  alignItems='center'
+                  flexDirection='row'
+                  alignItems='stretch'
                   justifyContent='center'
-                  border='2px solid rgb(5, 25, 46)'
-                  bg='rgb(5, 25, 46)'
+                  mb='2rem'
+                  isFitted
                 >
-                  <TabPanel>
-                    <WithdrawCollateral
-                      systemCoinAddress={SYSTEM_COIN_ADDRESS}
-                      collateralBalance={safe && formatEther(safe[0])}
-                      proxiedCollateralWithdraw={proxiedCollateralWithdraw}
-                    />
-                  </TabPanel>
-                  <TabPanel>
-                    <RedeemBox
-                      systemCoinAddress={SYSTEM_COIN_ADDRESS}
-                      systemCoinBalance={safe && formatEther(safe[1])}
-                      collateralBalance={safe && formatEther(safe[0])}
-                    />
-                  </TabPanel>
-                </TabPanels>
-              </Tabs>
+                  <TabList display='flex' flexDirection='column' w='50%'>
+                    <Tab
+                      _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }}
+                      h='50%'
+                    >
+                      <Text mr='1rem'> Withdraw Collateral</Text>
+                      <ArrowRightCircle />
+                    </Tab>
+                    <Tab
+                      _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }}
+                      h='50%'
+                    >
+                      <Text mr='1rem'>Redeem System Coins</Text>
+                      <ArrowRightCircle />
+                    </Tab>
+                  </TabList>
+
+                  <TabPanels
+                    minH='350px'
+                    py={6}
+                    display='flex'
+                    flexDirection='column'
+                    alignItems='center'
+                    justifyContent='center'
+                    border='2px solid rgb(5, 25, 46)'
+                    bg='rgb(5, 25, 46)'
+                  >
+                    <TabPanel w='100%' maxW='532px'>
+                      <WithdrawCollateral
+                        systemCoinAddress={SYSTEM_COIN_ADDRESS}
+                        lockedCollateralAmount={lockedCollateralAmount}
+                        proxiedCollateralWithdraw={proxiedCollateralWithdraw}
+                      />
+                    </TabPanel>
+                    <TabPanel>
+                      <RedeemBox
+                        systemCoinAddress={SYSTEM_COIN_ADDRESS}
+                        generatedDebtAmount={generatedDebtAmount}
+                        lockedCollateralAmount={lockedCollateralAmount}
+                        proxiedPrepareSystemCoins={proxiedPrepareSystemCoins}
+                        proxiedRedeemSystemCoins={proxiedRedeemSystemCoins}
+                        approveSystemCoin={approveSystemCoin}
+                        redeemableCoinBalance={redeemableCoinBalance}
+                        systemCoinBalance={systemCoinBalance}
+                        approvedSystemCoin={approvedSystemCoin}
+                        collateralCashPrice={collateralCashPrice}
+                      />
+                    </TabPanel>
+                  </TabPanels>
+                </Tabs>
+              </>
             )}
           </>
         )}

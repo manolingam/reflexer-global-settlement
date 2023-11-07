@@ -47,6 +47,10 @@ export const COLLATERAL_JOIN_ADDRESS = {
   11155111: '0x1c62F6127a37D98DD41Ea4578376B5a25d089FfC'
 };
 
+export const COIN_JOIN_ADDRESS = {
+  11155111: '0x041EC288DB5cc0D40ff794Af17c31A263998b335'
+};
+
 export const blockExplorerBaseUrl = {
   1: 'https://etherscan.io',
   11155111: 'https://sepolia.etherscan.io'

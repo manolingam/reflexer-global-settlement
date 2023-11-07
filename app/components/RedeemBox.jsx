@@ -13,16 +13,28 @@ import { useAccount, useNetwork } from 'wagmi';
 import { useState } from 'react';
 
 import { tokenTickers } from '@/app/utils/contracts';
+import { BalanceDisplay } from './BalanceDisplay';
 
 export const RedeemBox = ({
   systemCoinBalance,
-  collateralBalance,
-  systemCoinAddress
+  systemCoinAddress,
+  proxiedRedeemSystemCoins,
+  proxiedPrepareSystemCoins,
+  approveSystemCoin,
+  redeemableCoinBalance,
+  approvedSystemCoin,
+  collateralCashPrice
 }) => {
-  const [tokenInput, setTokenInput] = useState(0);
+  const [prepareInput, setPrepareInput] = useState(0);
+  const [redeeemInput, setRedeemInput] = useState(0);
 
   const { address } = useAccount();
   const { chain } = useNetwork();
+
+  const isApproved = Number(approvedSystemCoin) >= Number(prepareInput);
+  const redeemableCollateralAmount = (
+    Number(redeeemInput) * Number(collateralCashPrice)
+  ).toString();
 
   return (
     <Flex
@@ -35,7 +47,7 @@ export const RedeemBox = ({
       <Box border='2px solid white' borderRadius='5px' p='1rem' mb='.5rem'>
         <HStack mb='10px' alignItems='flex-end' justifyContent='space-between'>
           <Text fontSize='12px' opacity='0.8' textTransform='uppercase'>
-            System Coins
+            Prepare System Coins
           </Text>
           <Text fontSize='12px' opacity='0.8' textTransform='uppercase'>
             Balance:{' '}
@@ -46,13 +58,13 @@ export const RedeemBox = ({
           </Text>
         </HStack>
         <HStack>
-          <NumberInput value={tokenInput} defaultValue={0} min={0}>
+          <NumberInput value={prepareInput} defaultValue={0} min={0}>
             <NumberInputField
               bg='transparent'
               border='none'
               outline='none'
               fontSize='28px'
-              onChange={(e) => setTokenInput(e.target.value)}
+              onChange={(e) => setPrepareInput(e.target.value)}
             />
           </NumberInput>
           <Text textTransform='uppercase' fontWeight='bold'>
@@ -60,6 +72,35 @@ export const RedeemBox = ({
           </Text>
         </HStack>
       </Box>
+
+      {chain?.id in systemCoinAddress ? (
+        <Button
+          mt='0.5rem'
+          mb='2rem'
+          bg='white'
+          loadingText={'Transaction pending..'}
+          _hover={{
+            opacity: 0.7
+          }}
+          onClick={() => {
+            if (isApproved) proxiedPrepareSystemCoins(prepareInput);
+            else approveSystemCoin(prepareInput);
+          }}
+        >
+          {isApproved ? 'Prepare' : 'Approve'}
+        </Button>
+      ) : (
+        <Text
+          mt='5px'
+          mb='10px'
+          mx='auto'
+          fontSize='12px'
+          opacity='0.7'
+          fontStyle='italic'
+        >
+          {address ? 'Unsupported network!' : 'Connect your wallet'}
+        </Text>
+      )}
 
       <Box border='2px solid white' borderRadius='5px' p='1rem'>
         <HStack mb='10px' alignItems='flex-end' justifyContent='space-between'>
@@ -69,30 +110,38 @@ export const RedeemBox = ({
             mb='5px'
             textTransform='uppercase'
           >
-            Collateral Equivalent
+            Redeem System Coins
           </Text>
           <Text fontSize='12px' opacity='0.8' textTransform='uppercase'>
-            Balance:{' '}
+            Redeemable Balance:{' '}
             {new Intl.NumberFormat('en-US', {
               style: 'decimal',
               minimumFractionDigits: 0
-            }).format(Number(collateralBalance))}
+            }).format(Number(redeemableCoinBalance))}
           </Text>
         </HStack>
         <HStack>
-          <NumberInput value={tokenInput} defaultValue={0} min={0}>
+          <NumberInput value={redeeemInput} defaultValue={0} min={0}>
             <NumberInputField
               bg='transparent'
               border='none'
               outline='none'
               fontSize='28px'
-              onChange={(e) => setTokenInput(e.target.value)}
+              onChange={(e) => setRedeemInput(e.target.value)}
             />
           </NumberInput>
           <Text textTransform='uppercase' fontWeight='bold'>
-            {tokenTickers[chain?.id]?.collateral}
+            {tokenTickers[chain?.id]?.systemcoin}
           </Text>
         </HStack>
+      </Box>
+
+      <Box mt='1rem' w='100%'>
+        <BalanceDisplay
+          amount={redeemableCollateralAmount}
+          label='Redeemable Collateral'
+          symbol={tokenTickers[chain?.id]?.collateral}
+        />
       </Box>
 
       {chain?.id in systemCoinAddress ? (
@@ -100,7 +149,7 @@ export const RedeemBox = ({
           mt='1rem'
           bg='white'
           loadingText={'Transaction pending..'}
-          isDisabled={true}
+          onClick={() => proxiedRedeemSystemCoins(redeeemInput)}
           _hover={{
             opacity: 0.7
           }}
