@@ -12,18 +12,18 @@ import {
 import { useAccount, useNetwork } from 'wagmi';
 import { useState } from 'react';
 
-import { tokenTickers } from '@/app/utils/contracts';
-import { BalanceDisplay } from './BalanceDisplay';
+import { tokenTickers, SYSTEM_COIN_ADDRESS } from '@/app/utils/contracts';
+import { formatLargeNumber } from '../utils/helpers';
 
 export const RedeemBox = ({
   systemCoinBalance,
-  systemCoinAddress,
   proxiedRedeemSystemCoins,
   proxiedPrepareSystemCoins,
   approveSystemCoin,
   redeemableCoinBalance,
   approvedSystemCoin,
-  collateralCashPrice
+  collateralCashPrice,
+  txReceiptPending
 }) => {
   const [prepareInput, setPrepareInput] = useState(0);
   const [redeeemInput, setRedeemInput] = useState(0);
@@ -40,7 +40,6 @@ export const RedeemBox = ({
     <Flex
       direction='column'
       borderRadius='10px'
-      w={{ lg: '500px', sm: '90%' }}
       color='white'
       alignItems='center'
     >
@@ -73,11 +72,13 @@ export const RedeemBox = ({
         </HStack>
       </Box>
 
-      {chain?.id in systemCoinAddress ? (
+      {chain?.id in SYSTEM_COIN_ADDRESS ? (
         <Button
           mt='0.5rem'
           mb='2rem'
-          bg='white'
+          bg='#41c1d0'
+          isLoading={txReceiptPending}
+          isDisabled={Number(prepareInput) <= 0}
           loadingText={'Transaction pending..'}
           _hover={{
             opacity: 0.7
@@ -113,7 +114,7 @@ export const RedeemBox = ({
             Redeem System Coins
           </Text>
           <Text fontSize='12px' opacity='0.8' textTransform='uppercase'>
-            Redeemable Balance:{' '}
+            Balance:{' '}
             {new Intl.NumberFormat('en-US', {
               style: 'decimal',
               minimumFractionDigits: 0
@@ -137,18 +138,49 @@ export const RedeemBox = ({
       </Box>
 
       <Box mt='1rem' w='100%'>
-        <BalanceDisplay
-          amount={redeemableCollateralAmount}
-          label='Redeemable Collateral'
-          symbol={tokenTickers[chain?.id]?.collateral}
-        />
+        <Box
+          border='2px solid'
+          borderColor='white'
+          borderRadius='5px'
+          p='1rem'
+          bg='whiteAlpha.100'
+          w='100%'
+        >
+          <HStack
+            mb='10px'
+            alignItems='flex-end'
+            justifyContent='space-between'
+          >
+            <Text
+              fontSize='12px'
+              opacity='0.8'
+              mb='5px'
+              textTransform='uppercase'
+            >
+              Redeemable Collateral
+            </Text>
+          </HStack>
+          <HStack w='100%'>
+            <Text fontSize='28px' flex={1} cursor='not-allowed' pl={4}>
+              {formatLargeNumber(redeemableCollateralAmount)}
+            </Text>
+            <Text textTransform='uppercase' fontWeight='bold'>
+              {tokenTickers[chain?.id]?.collateral}
+            </Text>
+          </HStack>
+        </Box>
       </Box>
 
-      {chain?.id in systemCoinAddress ? (
+      {chain?.id in SYSTEM_COIN_ADDRESS ? (
         <Button
           mt='1rem'
-          bg='white'
+          bg='#41c1d0'
           loadingText={'Transaction pending..'}
+          isLoading={txReceiptPending}
+          isDisabled={
+            Number(redeeemInput) <= 0 ||
+            Number(redeeemInput) > Number(redeemableCoinBalance)
+          }
           onClick={() => proxiedRedeemSystemCoins(redeeemInput)}
           _hover={{
             opacity: 0.7

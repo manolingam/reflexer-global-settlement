@@ -4,7 +4,8 @@ import {
   useContractRead,
   useNetwork,
   usePublicClient,
-  useWalletClient
+  useWalletClient,
+  useWaitForTransaction
 } from 'wagmi';
 
 import {
@@ -16,7 +17,9 @@ import {
   zeroAddress
 } from 'viem';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+import { useToast, Link as ChakraLink, Box } from '@chakra-ui/react';
 
 import {
   // SYSTEM_COIN_ADDRESS,
@@ -29,7 +32,8 @@ import {
   GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ADDRESS,
   COIN_JOIN_ADDRESS,
   SYSTEM_COIN_ADDRESS,
-  COLLATERAL_ADDRESS
+  COLLATERAL_ADDRESS,
+  blockExplorerBaseUrl
 } from '../utils/contracts';
 
 import GLOBAL_SETTLEMENT_ABI from '../abis/GlobalSettlement.json';
@@ -41,6 +45,7 @@ import GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI from '../abis/GebProxyActionsGlob
 export const useGeb = () => {
   const { chain } = useNetwork();
   const { address } = useAccount();
+  const toast = useToast();
 
   const publicClient = usePublicClient({ chainId: chain?.id });
   const { data: walletClient } = useWalletClient();
@@ -49,6 +54,9 @@ export const useGeb = () => {
   const [safeAddress, setSafeAddress] = useState(zeroAddress);
 
   const [selectedSafeId, setSelectedSafeId] = useState(null);
+
+  const [txReceiptPending, setTxReceiptPending] = useState(false);
+  const [txReceipt, setTxReceipt] = useState('');
 
   const systemcoinContract = SYSTEM_COIN_ADDRESS?.[chain?.id];
   const collateralContract = COLLATERAL_ADDRESS?.[chain?.id];
@@ -61,18 +69,55 @@ export const useGeb = () => {
   const collateralJoinAddress = COLLATERAL_JOIN_ADDRESS?.[chain?.id];
   const coinJoinAddress = COIN_JOIN_ADDRESS?.[chain?.id];
 
-  const executeAsProxy = async (target, data) => {
-    const txHash = await walletClient.writeContract({
-      account: address,
-      address: proxyAddress,
-      abi: parseAbi([
-        'function execute(address _target, bytes _data) public payable returns (bytes response)'
-      ]),
-      functionName: 'execute',
-      args: [target, data]
-    });
+  useEffect(() => {
+    if (txReceipt !== '') {
+      toast({
+        position: 'bottom-left',
+        render: () => (
+          <Box bg='white' borderRadius='5px' color='black' p={3}>
+            View{' '}
+            <ChakraLink
+              textDecoration='underline'
+              href={`${blockExplorerBaseUrl[chain?.id]}/tx/${txReceipt}`}
+              isExternal
+            >
+              Transaction
+            </ChakraLink>
+          </Box>
+        )
+      });
+    }
+  }, [txReceipt]);
 
-    return txHash;
+  const {} = useWaitForTransaction({
+    hash: txReceipt,
+    enabled: txReceipt !== '' ? true : false,
+    onSuccess() {
+      setTxReceipt('');
+      setTxReceiptPending(false);
+    }
+  });
+
+  const executeAsProxy = async (target, data) => {
+    setTxReceiptPending(true);
+    try {
+      const txHash = await walletClient.writeContract({
+        account: address,
+        address: proxyAddress,
+        abi: parseAbi([
+          'function execute(address _target, bytes _data) public payable returns (bytes response)'
+        ]),
+        functionName: 'execute',
+        args: [target, data]
+      });
+
+      setTxReceipt(txHash);
+      return txHash;
+    } catch (err) {
+      console.log(err);
+      setTxReceipt('');
+      setTxReceiptPending(false);
+    }
   };
 
   const updateSafeId = async (_safeId) => {
@@ -257,11 +302,9 @@ export const useGeb = () => {
 
   const proxiedPrepareSystemCoins = async (amount) => {
     try {
-
       if (amount > systemCoinBalance) {
         throw new Error('Not enough system coins');
       }
-
 
       const amountInWei = parseEther(amount);
 
@@ -279,7 +322,6 @@ export const useGeb = () => {
 
   const proxiedRedeemSystemCoins = async (amount) => {
     try {
-
       if (amount > redeemableCoinBalance) {
         throw new Error('Not enough redeemable coins');
       }
@@ -339,6 +381,7 @@ export const useGeb = () => {
     redeemableCoinBalance,
     approvedSystemCoin,
     collateralCashPrice,
-    outstandingCoinSupply
+    outstandingCoinSupply,
+    txReceiptPending
   };
 };

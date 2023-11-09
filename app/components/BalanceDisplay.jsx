@@ -2,18 +2,7 @@
 
 import { Box, Text, HStack } from '@chakra-ui/react';
 
-const formatLargeNumber = (number) => {
-  const numberOfDigits = number.length;
-  if (numberOfDigits > 5) {
-    const firstPart = number.slice(0, 3);
-    const firstPartFormatted = (Number(firstPart) / 100).toFixed(2);
-    return `${firstPartFormatted} * 10^${numberOfDigits - 1}`;
-  }
-  return new Intl.NumberFormat('en-US', {
-    style: 'decimal',
-    minimumFractionDigits: 0
-  }).format(Number(number));
-};
+import { formatLargeNumber } from '../utils/helpers';
 
 export const BalanceDisplay = ({ amount, label, symbol, borderColor }) => {
   return (

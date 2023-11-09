@@ -54,7 +54,8 @@ export default function Home() {
     collateralBalance,
     redeemableCoinBalance,
     collateralCashPrice,
-    outstandingCoinSupply
+    outstandingCoinSupply,
+    txReceiptPending
   } = useGeb();
 
   return (
@@ -141,21 +142,24 @@ export default function Home() {
             {shutdownTime > 0 && (
               <Flex mt='2rem' alignItems='baseline'>
                 <HStack w='400px' spacing={5}>
-                  <InputGroup>
+                  <InputGroup borderColor='#41c1d0'>
                     <InputLeftAddon
                       children='SAFE ID'
-                      color='white'
-                      background='linear-gradient(to right, #41c1d0, #1a6c51)'
+                      color='black'
+                      background='#41c1d0'
+                      fontWeight='bold'
+                      border='none'
                     />
                     <Input
                       onChange={(e) => setSafeId(e.target.value)}
                       placeholder='0'
+                      border='none'
+                      bg='#232D3F'
                     />
                   </InputGroup>
                   <Button
-                    background='#3ac1b9'
+                    background='#41c1d0'
                     color='black'
-                    fontWeight='light'
                     _hover={{ opacity: 0.7 }}
                     onClick={() => {
                       updateSafeId(safeId);
@@ -251,25 +255,17 @@ export default function Home() {
                 </SimpleGrid>
                 <Tabs
                   variant='unstyled'
-                  display='flex'
-                  flexDirection='row'
-                  alignItems='stretch'
-                  justifyContent='center'
                   mb='2rem'
+                  border='2px solid #41c1d0'
+                  borderRadius='5px'
                   isFitted
                 >
-                  <TabList display='flex' flexDirection='column' w='50%'>
-                    <Tab
-                      _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }}
-                      h='50%'
-                    >
+                  <TabList>
+                    <Tab _selected={{ color: 'black', bg: '#41c1d0' }}>
                       <Text mr='1rem'> Withdraw Collateral</Text>
                       <ArrowRightCircle />
                     </Tab>
-                    <Tab
-                      _selected={{ color: 'white', bg: 'rgb(5, 25, 46)' }}
-                      h='50%'
-                    >
+                    <Tab _selected={{ color: 'black', bg: '#41c1d0' }}>
                       <Text mr='1rem'>Redeem System Coins</Text>
                       <ArrowRightCircle />
                     </Tab>
@@ -283,18 +279,16 @@ export default function Home() {
                     alignItems='center'
                     justifyContent='center'
                     border='2px solid rgb(5, 25, 46)'
-                    bg='rgb(5, 25, 46)'
                   >
                     <TabPanel w='100%' maxW='532px'>
                       <WithdrawCollateral
-                        systemCoinAddress={SYSTEM_COIN_ADDRESS}
                         lockedCollateralAmount={lockedCollateralAmount}
                         proxiedCollateralWithdraw={proxiedCollateralWithdraw}
+                        txReceiptPending={txReceiptPending}
                       />
                     </TabPanel>
                     <TabPanel>
                       <RedeemBox
-                        systemCoinAddress={SYSTEM_COIN_ADDRESS}
                         generatedDebtAmount={generatedDebtAmount}
                         lockedCollateralAmount={lockedCollateralAmount}
                         proxiedPrepareSystemCoins={proxiedPrepareSystemCoins}
@@ -304,6 +298,7 @@ export default function Home() {
                         systemCoinBalance={systemCoinBalance}
                         approvedSystemCoin={approvedSystemCoin}
                         collateralCashPrice={collateralCashPrice}
+                        txReceiptPending={txReceiptPending}
                       />
                     </TabPanel>
                   </TabPanels>

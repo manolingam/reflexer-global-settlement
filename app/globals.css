@@ -16,17 +16,17 @@ html {
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
-  background: transparent;
+  background: black;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
+  background: #41c1d0;
   border-radius: 5px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #e2e8f0;
-}
+/* ::-webkit-scrollbar-thumb:hover {
+  background: black;
+} */
 
 .status-light {
   /* Center the content */
