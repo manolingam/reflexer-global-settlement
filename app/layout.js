@@ -11,11 +11,13 @@ import {
 } from '@web3modal/ethereum';
 import { Web3Modal } from '@web3modal/react';
 import { configureChains, createConfig, WagmiConfig } from 'wagmi';
-import { mainnet, sepolia } from 'wagmi/chains';
+import { sepolia } from 'wagmi/chains';
+import { ApolloProvider } from '@apollo/client';
 
 import { Header } from './shared/Header';
 import { Footer } from './shared/Footer';
 import { Providers } from './providers';
+import { client } from './utils/graph';
 
 const poppins = Poppins({ subsets: ['latin'], weight: '500' });
 
@@ -34,27 +36,29 @@ export default function RootLayout({ children }) {
   return (
     <html lang='en'>
       <body className={poppins.className}>
-        <Providers>
-          <WagmiConfig config={wagmiConfig}>
-            <Box bg='black'>
-              <Flex
-                direction='column'
-                maxW='90rem'
-                minH='100vh'
-                mx='auto'
-                pt='2rem'
-                px={{ lg: '4rem', sm: '2rem' }}
-                bg='black'
-                color='white'
-              >
-                <Header />
-                {children}
-                <Footer />
-              </Flex>
-            </Box>
-          </WagmiConfig>
-          <Web3Modal projectId={projectId} ethereumClient={ethereumClient} />
-        </Providers>
+        <ApolloProvider client={client}>
+          <Providers>
+            <WagmiConfig config={wagmiConfig}>
+              <Box bg='black'>
+                <Flex
+                  direction='column'
+                  maxW='90rem'
+                  minH='100vh'
+                  mx='auto'
+                  pt='2rem'
+                  px={{ lg: '4rem', sm: '2rem' }}
+                  bg='black'
+                  color='white'
+                >
+                  <Header />
+                  {children}
+                  <Footer />
+                </Flex>
+              </Box>
+            </WagmiConfig>
+            <Web3Modal projectId={projectId} ethereumClient={ethereumClient} />
+          </Providers>
+        </ApolloProvider>
       </body>
     </html>
   );

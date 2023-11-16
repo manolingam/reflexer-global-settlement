@@ -19,6 +19,8 @@ import {
 
 import { useState, useEffect } from 'react';
 
+import { useLazyQuery } from '@apollo/client';
+
 import { useToast, Link as ChakraLink, Box } from '@chakra-ui/react';
 
 import {
@@ -36,6 +38,8 @@ import {
   blockExplorerBaseUrl
 } from '../utils/contracts';
 
+import { GET_SAFES_QUERY } from '../utils/queries';
+
 import GLOBAL_SETTLEMENT_ABI from '../abis/GlobalSettlement.json';
 import GEB_PROXY_REGISTRY_ABI from '../abis/GebProxyRegistry.json';
 import GEB_SAFE_MANAGER_ABI from '../abis/GebSafeManager.json';
@@ -49,6 +53,11 @@ export const useGeb = () => {
 
   const publicClient = usePublicClient({ chainId: chain?.id });
   const { data: walletClient } = useWalletClient();
+
+  const [
+    getSafesId,
+    { loading: safesQueryLoading, error, data: safesQueryResult }
+  ] = useLazyQuery(GET_SAFES_QUERY);
 
   const [safeOwner, setSafeOwner] = useState(zeroAddress);
   const [safeAddress, setSafeAddress] = useState(zeroAddress);
@@ -69,6 +78,163 @@ export const useGeb = () => {
   const collateralJoinAddress = COLLATERAL_JOIN_ADDRESS?.[chain?.id];
   const coinJoinAddress = COIN_JOIN_ADDRESS?.[chain?.id];
 
+  // WAGMI READS
+
+  let [proxyAddress, setProxyAddress] = useState(zeroAddress);
+  let [collateralType, setCollateralType] = useState('');
+
+  let [lockedCollateralAmount, generatedDebtAmount] = ['0', '0'];
+
+  let [approvedSystemCoin, setApprovedSystemCoin] = useState('0');
+  let [coinBagBalance, setCoinBagBalance] = useState('0');
+  let [coinsUsedToRedeem, setCoinsUsedToRedeem] = useState('0');
+  let [collateralCashPrice, setCollateralCashPrice] = useState(
+    formatUnits(BigInt(0), 27)
+  );
+  let [outstandingCoinSupply, setOutstandingCoinSupply] = useState('0');
+  let [shutdownTime, setShutdownTime] = useState(BigInt(0));
+  let [systemCoinBalance, setSystemCoinBalance] = useState('0');
+  let [collateralBalance, setCollateralBalance] = useState('0');
+
+  let redeemableCoinBalance = (
+    Number(coinBagBalance) - Number(coinsUsedToRedeem)
+  ).toString();
+
+  const getProxyAddress = useContractRead({
+    address: gebProxyRegistryContract,
+    abi: GEB_PROXY_REGISTRY_ABI,
+    functionName: 'proxies',
+    args: [address],
+    watch: true,
+    enabled: !!address,
+    onSuccess(data) {
+      setProxyAddress(data);
+      getSafesId({ variables: { address: data.toLowerCase() } });
+    }
+  });
+
+  const getCollateralType = useContractRead({
+    address: gebSafeManagerContract,
+    abi: GEB_SAFE_MANAGER_ABI,
+    functionName: 'collateralTypes',
+    args: [1],
+    watch: true,
+    onSuccess(data) {
+      setCollateralType(data);
+    }
+  });
+
+  const getSafeAmounts = useContractRead({
+    address: gebSafeEngineContract,
+    abi: GEB_SAFE_ENGINE_ABI,
+    functionName: 'safes',
+    args: [collateralType, safeAddress],
+    watch: true,
+    enabled: !!collateralType && !!safeAddress,
+    onSuccess(data) {
+      [lockedCollateralAmount, generatedDebtAmount] = data
+        ? data.map((d) => formatEther(d))
+        : ['0', '0'];
+    }
+  });
+
+  const getApprovedSystemCoin = useContractRead({
+    address: systemcoinContract,
+    abi: parseAbi([
+      'function allowance(address _owner, address _spender) public view returns (uint256)'
+    ]),
+    functionName: 'allowance',
+    args: [address, proxyAddress],
+    watch: true,
+    onSuccess(data) {
+      setApprovedSystemCoin(data ? formatEther(data) : '0');
+    }
+  });
+
+  const getCoinBagBalance = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'coinBag',
+    args: [proxyAddress],
+    watch: true,
+    onSuccess(data) {
+      setCoinBagBalance(data ? formatEther(data) : '0');
+    }
+  });
+
+  const getCoinsUsedToRedeem = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'coinsUsedToRedeem',
+    args: [collateralType, proxyAddress],
+    watch: true,
+    onSuccess(data) {
+      setCoinsUsedToRedeem(data ? formatEther(data) : '0');
+    }
+  });
+
+  const getCollateralCashPrice = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'collateralCashPrice',
+    args: [collateralType],
+    watch: true,
+    onSuccess(data) {
+      setCollateralCashPrice(formatUnits(data ? data : BigInt(0), 27));
+    }
+  });
+
+  const getOutstandingCoinSupply = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'outstandingCoinSupply',
+    watch: true,
+    onSuccess(data) {
+      setOutstandingCoinSupply(data ? formatEther(data) : '0');
+    }
+  });
+
+  const getShutdownTime = useContractRead({
+    address: globalSettlementContract,
+    abi: GLOBAL_SETTLEMENT_ABI,
+    functionName: 'shutdownTime',
+    watch: true,
+    onSuccess(data) {
+      setShutdownTime(BigInt(data || 0));
+    }
+  });
+
+  // WAGMI BALANCES
+
+  const getSystemCoinBalance = useBalance({
+    address,
+    enabled: systemcoinContract?.length !== 0,
+    token: systemcoinContract,
+    watch: true,
+    onSuccess(data) {
+      setSystemCoinBalance(data?.formatted || '0');
+    }
+  });
+
+  const getCollateralBalance = useBalance({
+    address,
+    enabled: collateralContract?.length !== 0,
+    token: collateralContract,
+    watch: true,
+    onSuccess(data) {
+      setCollateralBalance(data?.formatted || '0');
+    }
+  });
+
+  const {} = useWaitForTransaction({
+    hash: txReceipt,
+    enabled: txReceipt !== '' ? true : false,
+    onSuccess() {
+      setTxReceipt('');
+      setTxReceiptPending(false);
+    }
+  });
+
   useEffect(() => {
     if (txReceipt !== '') {
       toast({
@@ -88,15 +254,6 @@ export const useGeb = () => {
       });
     }
   }, [txReceipt]);
-
-  const {} = useWaitForTransaction({
-    hash: txReceipt,
-    enabled: txReceipt !== '' ? true : false,
-    onSuccess() {
-      setTxReceipt('');
-      setTxReceiptPending(false);
-    }
-  });
 
   const executeAsProxy = async (target, data) => {
     setTxReceiptPending(true);
@@ -149,133 +306,6 @@ export const useGeb = () => {
       setSelectedSafeId(null);
     }
   };
-
-  const getProxyAddress = useContractRead({
-    address: gebProxyRegistryContract,
-    abi: GEB_PROXY_REGISTRY_ABI,
-    functionName: 'proxies',
-    args: [address],
-    watch: true,
-    enabled: !!address
-  });
-
-  const proxyAddress = getProxyAddress.data || zeroAddress;
-
-  const getCollateralType = useContractRead({
-    address: gebSafeManagerContract,
-    abi: GEB_SAFE_MANAGER_ABI,
-    functionName: 'collateralTypes',
-    args: [1],
-    watch: true
-  });
-
-  const collateralType = getCollateralType.data || '';
-
-  const getSafeAmounts = useContractRead({
-    address: gebSafeEngineContract,
-    abi: GEB_SAFE_ENGINE_ABI,
-    functionName: 'safes',
-    args: [collateralType, safeAddress],
-    watch: true,
-    enabled: !!collateralType && !!safeAddress
-  });
-
-  const [lockedCollateralAmount, generatedDebtAmount] = getSafeAmounts.data
-    ? getSafeAmounts.data.map((d) => formatEther(d))
-    : ['0', '0'];
-
-  const getShutdownTime = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'shutdownTime',
-    watch: true
-  });
-
-  const shutdownTime = BigInt(getShutdownTime.data || 0);
-
-  const getApprovedSystemCoin = useContractRead({
-    address: systemcoinContract,
-    abi: parseAbi([
-      'function allowance(address _owner, address _spender) public view returns (uint256)'
-    ]),
-    functionName: 'allowance',
-    args: [address, proxyAddress],
-    watch: true
-  });
-
-  const approvedSystemCoin = getApprovedSystemCoin.data
-    ? formatEther(getApprovedSystemCoin.data)
-    : '0';
-
-  const getSystemCoinBalance = useBalance({
-    address,
-    enabled: systemcoinContract?.length !== 0,
-    token: systemcoinContract,
-    watch: true
-  });
-
-  const systemCoinBalance = getSystemCoinBalance.data?.formatted || '0';
-
-  const getCollateralBalance = useBalance({
-    address,
-    enabled: collateralContract?.length !== 0,
-    token: collateralContract,
-    watch: true
-  });
-
-  const collateralBalance = getCollateralBalance.data?.formatted || '0';
-
-  const getCoinBagBalance = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'coinBag',
-    args: [proxyAddress],
-    watch: true
-  });
-
-  const coinBagBalance = getCoinBagBalance.data
-    ? formatEther(getCoinBagBalance.data)
-    : '0';
-
-  const getCoinsUsedToRedeem = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'coinsUsedToRedeem',
-    args: [collateralType, proxyAddress],
-    watch: true
-  });
-
-  const coinsUsedToRedeem = getCoinsUsedToRedeem.data
-    ? formatEther(getCoinsUsedToRedeem.data)
-    : '0';
-
-  const redeemableCoinBalance = (
-    Number(coinBagBalance) - Number(coinsUsedToRedeem)
-  ).toString();
-
-  const getCollateralCashPrice = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'collateralCashPrice',
-    args: [collateralType],
-    watch: true
-  });
-
-  const collateralCashPrice = formatUnits(
-    getCollateralCashPrice.data ? getCollateralCashPrice.data : BigInt(0),
-    27
-  );
-
-  const getOutstandingCoinSupply = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'outstandingCoinSupply',
-    watch: true
-  });
-
-  const outstandingCoinSupply = getOutstandingCoinSupply.data
-    ? formatEther(getOutstandingCoinSupply.data)
-    : '0';
 
   const proxiedCollateralWithdraw = async () => {
     try {
@@ -364,6 +394,8 @@ export const useGeb = () => {
   };
 
   return {
+    safesQueryResult,
+    safesQueryLoading,
     updateSafeId,
     safeAddress,
     safeOwner,

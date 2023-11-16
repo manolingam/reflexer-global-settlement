@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import {
   Tabs,
@@ -11,23 +11,23 @@ import {
   Flex,
   Text,
   SimpleGrid,
-  HStack,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Button,
-  VStack
+  FormControl,
+  FormLabel,
+  VStack,
+  Spinner
 } from '@chakra-ui/react';
 
 import { ArrowRightCircle } from 'lucide-react';
 
 import { useNetwork } from 'wagmi';
+import { zeroAddress } from 'viem';
 
 import { SYSTEM_COIN_ADDRESS, blockExplorerBaseUrl } from './utils/contracts';
 import { getAccountString } from './utils/helpers';
 
 import { RedeemBox } from './components/RedeemBox';
 import { WithdrawCollateral } from './components/WithdrawCollateral';
+import { RadioBox } from './components/RadioBox';
 
 import { useGeb } from './hooks/useGeb';
 import { BalanceDisplay } from './components/BalanceDisplay';
@@ -36,9 +36,12 @@ import { tokenTickers } from '@/app/utils/contracts';
 export default function Home() {
   const { chain } = useNetwork();
 
-  const [safeId, setSafeId] = useState(0);
+  const [safeIds, setSafeIds] = useState([]);
+  const [selectedSafeId, setSelectedSafeId] = useState('0');
 
   const {
+    safesQueryResult,
+    safesQueryLoading,
     updateSafeId,
     safeOwner,
     lockedCollateralAmount,
@@ -58,12 +61,28 @@ export default function Home() {
     txReceiptPending
   } = useGeb();
 
+  useEffect(() => {
+    let safeIds = [];
+    if (safesQueryResult?.users?.length > 0) {
+      safesQueryResult.users[0].safes.map((safe) => {
+        safeIds.push(safe.safeId);
+      });
+    }
+    setSafeIds(safeIds);
+    if (safeIds.length > 0) {
+      setSelectedSafeId(safeIds[0]);
+    } else {
+      setSelectedSafeId(0);
+    }
+  }, [safesQueryResult]);
+
+  useEffect(() => {
+    if (selectedSafeId != '0') updateSafeId(Number(selectedSafeId));
+  }, [selectedSafeId]);
+
   return (
     <Flex direction='column'>
       <Flex direction='column'>
-        {/* <Text fontSize={{ lg: '24px', sm: '18px' }} mb='1rem'>
-          Global Settlement
-        </Text> */}
         <Text fontSize={{ lg: '16px', sm: '14px' }} maxW='800px' opacity='0.7'>
           In case of an emergency protocol shutdown, you can withdraw any excess
           collateral & redeem system coins below.
@@ -84,8 +103,9 @@ export default function Home() {
             backgroundClip='text'
             fontWeight='extrabold'
           >
-            {shutdownTime &&
-              new Date(Number(shutdownTime) * 1000).toDateString()}
+            {shutdownTime
+              ? new Date(Number(shutdownTime) * 1000).toDateString()
+              : 'Not Available'}
           </Text>
           <Text fontSize={{ lg: '14px', sm: '12px' }} fontWeight='bold'>
             Shutdown Triggered Time
@@ -139,49 +159,49 @@ export default function Home() {
           </Text>
         ) : (
           <>
-            {shutdownTime > 0 && (
-              <Flex mt='2rem' alignItems='baseline'>
-                <HStack w='400px' spacing={5}>
-                  <InputGroup borderColor='#41c1d0'>
-                    <InputLeftAddon
-                      children='SAFE ID'
-                      color='black'
-                      background='#41c1d0'
-                      fontWeight='bold'
-                      border='none'
-                    />
-                    <Input
-                      onChange={(e) => setSafeId(e.target.value)}
-                      placeholder='0'
-                      border='none'
-                      bg='#232D3F'
-                    />
-                  </InputGroup>
-                  <Button
-                    background='#41c1d0'
-                    color='black'
-                    _hover={{ opacity: 0.7 }}
-                    onClick={() => {
-                      updateSafeId(safeId);
-                    }}
-                    px='2rem'
-                  >
-                    Search
-                  </Button>
-                </HStack>
-              </Flex>
+            {proxyAddress === zeroAddress && (
+              <Spinner size='lg' color='#41c1d0' mx='auto' mt='4rem' />
             )}
 
-            {shutdownTime > 0 && proxyAddress !== safeOwner && (
+            {shutdownTime > 0 && safesQueryLoading && (
               <Text
                 mt='4rem'
                 mx='auto'
                 opacity='0.7'
                 fontSize={{ lg: '14px', sm: '12px' }}
               >
-                Connected proxy is not the owner of safe #{safeId}
+                Loading your safes..
               </Text>
             )}
+
+            {shutdownTime > 0 && !safesQueryLoading && safeIds.length == 0 && (
+              <Text
+                mt='4rem'
+                mx='auto'
+                opacity='0.7'
+                fontSize={{ lg: '14px', sm: '12px' }}
+              >
+                No safes found.
+              </Text>
+            )}
+
+            {shutdownTime > 0 &&
+              !safesQueryLoading &&
+              selectedSafeId != '0' && (
+                <FormControl isRequired color='white'>
+                  <FormLabel as='legend' fontSize={{ lg: '14px', sm: '12px' }}>
+                    Your safes
+                  </FormLabel>
+                  <RadioBox
+                    stack='horizontal'
+                    options={safeIds}
+                    updateRadio={setSelectedSafeId}
+                    defaultValue={selectedSafeId}
+                    value={selectedSafeId}
+                    name='selected_safe_id'
+                  />
+                </FormControl>
+              )}
 
             {shutdownTime > 0 && proxyAddress === safeOwner && (
               <>
