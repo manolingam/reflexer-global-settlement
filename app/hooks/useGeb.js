@@ -55,8 +55,6 @@ export const useGeb = () => {
   const [getSafesId, { loading: safesQueryLoading, data: safesQueryResult }] =
     useLazyQuery(GET_SAFES_QUERY);
 
-  const [showTxModal, setShowTxModal] = useState(true);
-
   const [safeOwner, setSafeOwner] = useState(zeroAddress);
   const [safeAddress, setSafeAddress] = useState(zeroAddress);
 
@@ -298,21 +296,6 @@ export const useGeb = () => {
     }
   }, [collateralType, safeAddress]);
 
-  useEffect(() => {
-    if (txReceipt !== '') {
-      toast({
-        position: 'bottom-left',
-        render: () => (
-          <TransactionAlert
-            status='info'
-            title='Transaction sent'
-            href={`${blockExplorerBaseUrl[chain?.id]}/tx/${txReceipt}`}
-          />
-        )
-      });
-    }
-  }, [txReceipt]);
-
   // WAGMI BALANCES
 
   const getSystemCoinBalance = useBalance({
@@ -348,6 +331,11 @@ export const useGeb = () => {
           <TransactionAlert status='success' title='Transaction Mined' />
         )
       });
+
+      fetchApprovedSystemCoin();
+      fetchCoinBagBalance();
+      fetchCoinsUsedToRedeem();
+      fetchSafeAmounts();
     }
   });
 
@@ -364,12 +352,23 @@ export const useGeb = () => {
         args: [target, data]
       });
 
+      toast({
+        position: 'bottom-left',
+        render: () => (
+          <TransactionAlert
+            status='info'
+            title='Transaction sent'
+            href={`${blockExplorerBaseUrl[chain?.id]}/tx/${txHash}`}
+          />
+        )
+      });
+
       setTxReceipt(txHash);
       return txHash;
     } catch (err) {
       console.log(err);
-      setTxReceipt('');
       setTxReceiptPending(false);
+      setTxReceipt('');
     }
   };
 
@@ -413,6 +412,12 @@ export const useGeb = () => {
       return executeAsProxy(gebProxyActionsGlobalSettlementContract, data);
     } catch (err) {
       console.log('Error in proxiedPrepareSystemCoins', err);
+      toast({
+        position: 'bottom-left',
+        render: () => (
+          <TransactionAlert status='error' title='Not enough system coins' />
+        )
+      });
     }
   };
 
@@ -437,14 +442,24 @@ export const useGeb = () => {
       return executeAsProxy(gebProxyActionsGlobalSettlementContract, data);
     } catch (err) {
       console.log('Error in proxiedRedeemSystemCoins', err);
+      toast({
+        position: 'bottom-left',
+        render: () => (
+          <TransactionAlert
+            status='error'
+            title='Not enough redeemable coins'
+          />
+        )
+      });
     }
   };
 
   const approveSystemCoin = async (amount) => {
+    setTxReceiptPending(true);
     try {
       const amountInWei = parseEther(amount);
 
-      return walletClient.writeContract({
+      const txHash = await walletClient.writeContract({
         account: address,
         address: systemcoinContract,
         abi: parseAbi([
@@ -453,8 +468,25 @@ export const useGeb = () => {
         functionName: 'approve',
         args: [proxyAddress, amountInWei]
       });
+
+      toast({
+        position: 'bottom-left',
+        render: () => (
+          <TransactionAlert
+            status='info'
+            title='Transaction sent'
+            href={`${blockExplorerBaseUrl[chain?.id]}/tx/${txHash}`}
+          />
+        )
+      });
+
+      setTxReceipt(txHash);
+
+      return txHash;
     } catch (err) {
       console.log('Error in proxiedApproveToken', err);
+      setTxReceiptPending(false);
+      setTxReceipt('');
     }
   };
 
@@ -480,7 +512,6 @@ export const useGeb = () => {
     outstandingCoinSupply,
     txReceiptPending,
     fetchSafeAddress,
-    fetchSafeOwner,
-    showTxModal
+    fetchSafeOwner
   };
 };
