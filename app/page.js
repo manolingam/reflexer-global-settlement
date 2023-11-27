@@ -22,16 +22,18 @@ import { ArrowRightCircle } from 'lucide-react';
 import { useNetwork } from 'wagmi';
 import { zeroAddress } from 'viem';
 
-import { SYSTEM_COIN_ADDRESS, blockExplorerBaseUrl } from './utils/contracts';
+import { blockExplorerBaseUrl } from './utils/contracts';
 import { getAccountString } from './utils/helpers';
 
 import { RedeemBox } from './components/RedeemBox';
 import { WithdrawCollateral } from './components/WithdrawCollateral';
+import { PrepareBox } from './components/PrepareBox';
 import { RadioBox } from './components/RadioBox';
 
 import { useGeb } from './hooks/useGeb';
 import { BalanceDisplay } from './components/BalanceDisplay';
 import { tokenTickers } from '@/app/utils/contracts';
+import { TransactionAlert } from './components/TransactionAlert';
 
 export default function Home() {
   const { chain } = useNetwork();
@@ -42,24 +44,29 @@ export default function Home() {
   const {
     safesQueryResult,
     safesQueryLoading,
-    updateSafeId,
     safeOwner,
     lockedCollateralAmount,
     generatedDebtAmount,
     proxyAddress,
     shutdownTime,
-    proxiedCollateralWithdraw,
-    proxiedPrepareSystemCoins,
-    proxiedRedeemSystemCoins,
-    approveSystemCoin,
     approvedSystemCoin,
     systemCoinBalance,
     collateralBalance,
     redeemableCoinBalance,
     collateralCashPrice,
     outstandingCoinSupply,
-    txReceiptPending
+    fetchSafeAddress,
+    fetchSafeOwner
   } = useGeb();
+
+  const updateSafeId = async (_safeId) => {
+    if (Number.isNaN(_safeId)) {
+      return;
+    } else {
+      fetchSafeOwner(_safeId);
+      fetchSafeAddress(_safeId);
+    }
+  };
 
   useEffect(() => {
     let safeIds = [];
@@ -206,72 +213,36 @@ export default function Home() {
             {shutdownTime > 0 && proxyAddress === safeOwner && (
               <>
                 <SimpleGrid columns='3' gap='5' mb='2rem' mt='3rem'>
-                  <VStack spacing={4} mb={4} align='stretch'>
-                    <BalanceDisplay
-                      amount={collateralBalance}
-                      label='Collateral Balance'
-                      symbol={tokenTickers[chain?.id]?.collateral}
-                      borderColor='#41c1d0'
-                    />
-                    <BalanceDisplay
-                      amount={systemCoinBalance}
-                      label='System Coin Balance'
-                      symbol={tokenTickers[chain?.id]?.systemcoin}
-                      borderColor='#41c1d0'
-                    />
-                    <BalanceDisplay
-                      amount={redeemableCoinBalance}
-                      label='Redeemable Coin Balance'
-                      symbol={tokenTickers[chain?.id]?.systemcoin}
-                      borderColor='#41c1d0'
-                    />
-                  </VStack>
-                  <VStack spacing={4} mb={4} align='stretch'>
-                    <BalanceDisplay
-                      amount={lockedCollateralAmount}
-                      label='Locked Collateral'
-                      symbol={tokenTickers[chain?.id]?.collateral}
-                      borderColor='#41c1d0'
-                    />
-                    <BalanceDisplay
-                      amount={approvedSystemCoin}
-                      label='Approved System Coin'
-                      symbol={tokenTickers[chain?.id]?.systemcoin}
-                      borderColor='#41c1d0'
-                    />
-                    <BalanceDisplay
-                      amount={generatedDebtAmount}
-                      label='Generated Debt'
-                      symbol={tokenTickers[chain?.id]?.systemcoin}
-                      borderColor='#41c1d0'
-                    />
-                  </VStack>
-                  <VStack spacing={4} mb={4} align='stretch'>
-                    <BalanceDisplay
-                      amount={outstandingCoinSupply}
-                      label={
-                        outstandingCoinSupply === '0'
-                          ? 'Outstanding Coin Supply (not set)'
-                          : 'Outstanding Coin Supply'
-                      }
-                      symbol={tokenTickers[chain?.id]?.systemcoin}
-                      borderColor='#41c1d0'
-                    />
-                    <BalanceDisplay
-                      amount={collateralCashPrice}
-                      label={
-                        collateralCashPrice === '0'
-                          ? 'Collateral Cash Price (not set)'
-                          : 'Collateral Cash Price'
-                      }
-                      symbol={
-                        tokenTickers[chain?.id]?.collateral +
-                        '/' +
-                        tokenTickers[chain?.id]?.systemcoin
-                      }
-                      borderColor='#41c1d0'
-                    />
-                  </VStack>
+                  <BalanceDisplay
+                    amount={generatedDebtAmount}
+                    label='Generated Debt'
+                    symbol={tokenTickers[chain?.id]?.systemcoin}
+                    borderColor='#41c1d0'
+                  />
+                  <BalanceDisplay
+                    amount={outstandingCoinSupply}
+                    label={
+                      outstandingCoinSupply === '0'
+                        ? 'Outstanding Coin Supply (not set)'
+                        : 'Outstanding Coin Supply'
+                    }
+                    symbol={tokenTickers[chain?.id]?.systemcoin}
+                    borderColor='#41c1d0'
+                  />
+                  <BalanceDisplay
+                    amount={collateralCashPrice}
+                    label={
+                      collateralCashPrice === '0'
+                        ? 'Collateral Cash Price (not set)'
+                        : 'Collateral Cash Price'
+                    }
+                    symbol={
+                      tokenTickers[chain?.id]?.collateral +
+                      '/' +
+                      tokenTickers[chain?.id]?.systemcoin
+                    }
+                    borderColor='#41c1d0'
+                  />
                 </SimpleGrid>
                 <Tabs
                   variant='unstyled'
@@ -282,7 +253,11 @@ export default function Home() {
                 >
                   <TabList>
                     <Tab _selected={{ color: 'black', bg: '#41c1d0' }}>
-                      <Text mr='1rem'> Withdraw Collateral</Text>
+                      <Text mr='1rem'>Withdraw Collateral</Text>
+                      <ArrowRightCircle />
+                    </Tab>
+                    <Tab _selected={{ color: 'black', bg: '#41c1d0' }}>
+                      <Text mr='1rem'>Approve System Coins</Text>
                       <ArrowRightCircle />
                     </Tab>
                     <Tab _selected={{ color: 'black', bg: '#41c1d0' }}>
@@ -301,25 +276,13 @@ export default function Home() {
                     border='2px solid rgb(5, 25, 46)'
                   >
                     <TabPanel w='100%' maxW='532px'>
-                      <WithdrawCollateral
-                        lockedCollateralAmount={lockedCollateralAmount}
-                        proxiedCollateralWithdraw={proxiedCollateralWithdraw}
-                        txReceiptPending={txReceiptPending}
-                      />
+                      <WithdrawCollateral safeId={selectedSafeId} />
                     </TabPanel>
                     <TabPanel>
-                      <RedeemBox
-                        generatedDebtAmount={generatedDebtAmount}
-                        lockedCollateralAmount={lockedCollateralAmount}
-                        proxiedPrepareSystemCoins={proxiedPrepareSystemCoins}
-                        proxiedRedeemSystemCoins={proxiedRedeemSystemCoins}
-                        approveSystemCoin={approveSystemCoin}
-                        redeemableCoinBalance={redeemableCoinBalance}
-                        systemCoinBalance={systemCoinBalance}
-                        approvedSystemCoin={approvedSystemCoin}
-                        collateralCashPrice={collateralCashPrice}
-                        txReceiptPending={txReceiptPending}
-                      />
+                      <PrepareBox />
+                    </TabPanel>
+                    <TabPanel>
+                      <RedeemBox />
                     </TabPanel>
                   </TabPanels>
                 </Tabs>

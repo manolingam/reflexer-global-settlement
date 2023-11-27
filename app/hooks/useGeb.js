@@ -1,9 +1,7 @@
 import {
   useAccount,
   useBalance,
-  useContractRead,
   useNetwork,
-  usePublicClient,
   useWalletClient,
   useWaitForTransaction
 } from 'wagmi';
@@ -17,15 +15,12 @@ import {
   zeroAddress
 } from 'viem';
 
+import { Contract } from 'ethers';
 import { useState, useEffect } from 'react';
-
 import { useLazyQuery } from '@apollo/client';
-
-import { useToast, Link as ChakraLink, Box } from '@chakra-ui/react';
+import { useToast } from '@chakra-ui/react';
 
 import {
-  // SYSTEM_COIN_ADDRESS,
-  // COLLATERAL_ADDRESS,
   GLOBAL_SETTLEMENT_ADDRESS,
   GEB_PROXY_REGISTRY_ADDRESS,
   GEB_SAFE_MANAGER_ADDRESS,
@@ -46,23 +41,24 @@ import GEB_SAFE_MANAGER_ABI from '../abis/GebSafeManager.json';
 import GEB_SAFE_ENGINE_ABI from '../abis/GebSafeEngine.json';
 import GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI from '../abis/GebProxyActionsGlobalSettlement.json';
 
+import { useEthersProvider } from './ethersProvider';
+import { TransactionAlert } from '../components/TransactionAlert';
+
 export const useGeb = () => {
   const { chain } = useNetwork();
   const { address } = useAccount();
-  const toast = useToast();
-
-  const publicClient = usePublicClient({ chainId: chain?.id });
   const { data: walletClient } = useWalletClient();
 
-  const [
-    getSafesId,
-    { loading: safesQueryLoading, error, data: safesQueryResult }
-  ] = useLazyQuery(GET_SAFES_QUERY);
+  const toast = useToast();
+  const provider = useEthersProvider({ chainId: chain?.id });
+
+  const [getSafesId, { loading: safesQueryLoading, data: safesQueryResult }] =
+    useLazyQuery(GET_SAFES_QUERY);
+
+  const [showTxModal, setShowTxModal] = useState(true);
 
   const [safeOwner, setSafeOwner] = useState(zeroAddress);
   const [safeAddress, setSafeAddress] = useState(zeroAddress);
-
-  const [selectedSafeId, setSelectedSafeId] = useState(null);
 
   const [txReceiptPending, setTxReceiptPending] = useState(false);
   const [txReceipt, setTxReceipt] = useState('');
@@ -78,13 +74,8 @@ export const useGeb = () => {
   const collateralJoinAddress = COLLATERAL_JOIN_ADDRESS?.[chain?.id];
   const coinJoinAddress = COIN_JOIN_ADDRESS?.[chain?.id];
 
-  // WAGMI READS
-
   let [proxyAddress, setProxyAddress] = useState(zeroAddress);
   let [collateralType, setCollateralType] = useState('');
-
-  let [lockedCollateralAmount, generatedDebtAmount] = ['0', '0'];
-
   let [approvedSystemCoin, setApprovedSystemCoin] = useState('0');
   let [coinBagBalance, setCoinBagBalance] = useState('0');
   let [coinsUsedToRedeem, setCoinsUsedToRedeem] = useState('0');
@@ -96,113 +87,231 @@ export const useGeb = () => {
   let [systemCoinBalance, setSystemCoinBalance] = useState('0');
   let [collateralBalance, setCollateralBalance] = useState('0');
 
+  let [lockedCollateralAmount, generatedDebtAmount] = ['0', '0'];
   let redeemableCoinBalance = (
     Number(coinBagBalance) - Number(coinsUsedToRedeem)
   ).toString();
 
-  const getProxyAddress = useContractRead({
-    address: gebProxyRegistryContract,
-    abi: GEB_PROXY_REGISTRY_ABI,
-    functionName: 'proxies',
-    args: [address],
-    watch: true,
-    enabled: !!address,
-    onSuccess(data) {
-      setProxyAddress(data);
-      getSafesId({ variables: { address: data.toLowerCase() } });
-    }
-  });
+  const fetchProxyAddress = async () => {
+    try {
+      const contract = new Contract(
+        gebProxyRegistryContract,
+        GEB_PROXY_REGISTRY_ABI,
+        provider
+      );
 
-  const getCollateralType = useContractRead({
-    address: gebSafeManagerContract,
-    abi: GEB_SAFE_MANAGER_ABI,
-    functionName: 'collateralTypes',
-    args: [1],
-    watch: true,
-    onSuccess(data) {
-      setCollateralType(data);
-    }
-  });
+      let res = await contract.proxies(address);
 
-  const getSafeAmounts = useContractRead({
-    address: gebSafeEngineContract,
-    abi: GEB_SAFE_ENGINE_ABI,
-    functionName: 'safes',
-    args: [collateralType, safeAddress],
-    watch: true,
-    enabled: !!collateralType && !!safeAddress,
-    onSuccess(data) {
-      [lockedCollateralAmount, generatedDebtAmount] = data
-        ? data.map((d) => formatEther(d))
+      getSafesId({ variables: { address: res.toLowerCase() } });
+      setProxyAddress(res);
+    } catch (err) {
+      console.log(err);
+      setProxyAddress(zeroAddress);
+    }
+  };
+
+  const fetchShutdownTime = async () => {
+    try {
+      const contract = new Contract(
+        globalSettlementContract,
+        GLOBAL_SETTLEMENT_ABI,
+        provider
+      );
+
+      let res = await contract.shutdownTime();
+      setShutdownTime(BigInt(res || 0));
+    } catch (err) {
+      console.log(err);
+      setShutdownTime(BigInt(0));
+    }
+  };
+
+  const fetchCollateralType = async () => {
+    try {
+      const contract = new Contract(
+        gebSafeManagerContract,
+        GEB_SAFE_MANAGER_ABI,
+        provider
+      );
+
+      let res = await contract.collateralTypes(1);
+      setCollateralType(res);
+    } catch (err) {
+      console.log(err);
+      setCollateralType('');
+    }
+  };
+
+  const fetchOutstandingCoinSupply = async () => {
+    try {
+      const contract = new Contract(
+        globalSettlementContract,
+        GLOBAL_SETTLEMENT_ABI,
+        provider
+      );
+
+      let res = await contract.outstandingCoinSupply();
+      setOutstandingCoinSupply(res ? formatEther(res) : '0');
+    } catch (err) {
+      console.log(err);
+      setOutstandingCoinSupply('0');
+    }
+  };
+
+  useEffect(() => {
+    if (address) {
+      fetchShutdownTime();
+      fetchCollateralType();
+      fetchOutstandingCoinSupply();
+      fetchProxyAddress();
+    }
+  }, [address]);
+
+  const fetchApprovedSystemCoin = async () => {
+    try {
+      const contract = new Contract(
+        systemcoinContract,
+        parseAbi([
+          'function allowance(address _owner, address _spender) public view returns (uint256)'
+        ]),
+        provider
+      );
+
+      let res = await contract.allowance(address, proxyAddress);
+      setApprovedSystemCoin(res ? formatEther(res) : '0');
+    } catch (err) {
+      console.log(err);
+      setApprovedSystemCoin('0');
+    }
+  };
+
+  const fetchCoinBagBalance = async () => {
+    try {
+      const contract = new Contract(
+        globalSettlementContract,
+        GLOBAL_SETTLEMENT_ABI,
+        provider
+      );
+
+      let res = await contract.coinBag(proxyAddress);
+      setCoinBagBalance(res ? formatEther(res) : '0');
+    } catch (err) {
+      console.log(err);
+      setCoinBagBalance('0');
+    }
+  };
+
+  const fetchCoinsUsedToRedeem = async () => {
+    try {
+      const contract = new Contract(
+        globalSettlementContract,
+        GLOBAL_SETTLEMENT_ABI,
+        provider
+      );
+
+      let res = await contract.coinsUsedToRedeem(collateralType, proxyAddress);
+      setCoinsUsedToRedeem(res ? formatEther(res) : '0');
+    } catch (err) {
+      console.log(err);
+      setCoinsUsedToRedeem('0');
+    }
+  };
+
+  const fetchCollateralCashPrice = async () => {
+    try {
+      const contract = new Contract(
+        globalSettlementContract,
+        GLOBAL_SETTLEMENT_ABI,
+        provider
+      );
+
+      let res = await contract.collateralCashPrice(collateralType);
+      setCollateralCashPrice(formatUnits(res ? res : BigInt(0), 27));
+    } catch (err) {
+      console.log(err);
+      setCollateralCashPrice(formatUnits(BigInt(0), 27));
+    }
+  };
+
+  useEffect(() => {
+    if (address && proxyAddress) {
+      fetchApprovedSystemCoin();
+      fetchCoinBagBalance();
+      fetchCoinsUsedToRedeem();
+      fetchCollateralCashPrice();
+    }
+  }, [proxyAddress]);
+
+  const fetchSafeOwner = async (_safeId) => {
+    try {
+      const contract = new Contract(
+        gebSafeManagerContract,
+        GEB_SAFE_MANAGER_ABI,
+        provider
+      );
+
+      let res = await contract.ownsSAFE(_safeId);
+      setSafeOwner(res);
+    } catch (err) {
+      console.log(err);
+      setSafeOwner(zeroAddress);
+    }
+  };
+
+  const fetchSafeAddress = async (_safeId) => {
+    try {
+      const contract = new Contract(
+        gebSafeManagerContract,
+        GEB_SAFE_MANAGER_ABI,
+        provider
+      );
+
+      let res = await contract.safes(_safeId);
+      setSafeAddress(res);
+    } catch (err) {
+      console.log(err);
+      setSafeAddress(zeroAddress);
+    }
+  };
+
+  const fetchSafeAmounts = async () => {
+    try {
+      const contract = new Contract(
+        gebSafeEngineContract,
+        GEB_SAFE_ENGINE_ABI,
+        provider
+      );
+
+      let res = await contract.safes(collateralType, safeAddress);
+      [lockedCollateralAmount, generatedDebtAmount] = res
+        ? res.map((d) => formatEther(d))
         : ['0', '0'];
+    } catch (err) {
+      console.log(err);
+      [lockedCollateralAmount, generatedDebtAmount] = ['0', '0'];
     }
-  });
+  };
 
-  const getApprovedSystemCoin = useContractRead({
-    address: systemcoinContract,
-    abi: parseAbi([
-      'function allowance(address _owner, address _spender) public view returns (uint256)'
-    ]),
-    functionName: 'allowance',
-    args: [address, proxyAddress],
-    watch: true,
-    onSuccess(data) {
-      setApprovedSystemCoin(data ? formatEther(data) : '0');
+  useEffect(() => {
+    if (collateralType && safeAddress) {
+      fetchSafeAmounts();
     }
-  });
+  }, [collateralType, safeAddress]);
 
-  const getCoinBagBalance = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'coinBag',
-    args: [proxyAddress],
-    watch: true,
-    onSuccess(data) {
-      setCoinBagBalance(data ? formatEther(data) : '0');
+  useEffect(() => {
+    if (txReceipt !== '') {
+      toast({
+        position: 'bottom-left',
+        render: () => (
+          <TransactionAlert
+            status='info'
+            title='Transaction sent'
+            href={`${blockExplorerBaseUrl[chain?.id]}/tx/${txReceipt}`}
+          />
+        )
+      });
     }
-  });
-
-  const getCoinsUsedToRedeem = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'coinsUsedToRedeem',
-    args: [collateralType, proxyAddress],
-    watch: true,
-    onSuccess(data) {
-      setCoinsUsedToRedeem(data ? formatEther(data) : '0');
-    }
-  });
-
-  const getCollateralCashPrice = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'collateralCashPrice',
-    args: [collateralType],
-    watch: true,
-    onSuccess(data) {
-      setCollateralCashPrice(formatUnits(data ? data : BigInt(0), 27));
-    }
-  });
-
-  const getOutstandingCoinSupply = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'outstandingCoinSupply',
-    watch: true,
-    onSuccess(data) {
-      setOutstandingCoinSupply(data ? formatEther(data) : '0');
-    }
-  });
-
-  const getShutdownTime = useContractRead({
-    address: globalSettlementContract,
-    abi: GLOBAL_SETTLEMENT_ABI,
-    functionName: 'shutdownTime',
-    watch: true,
-    onSuccess(data) {
-      setShutdownTime(BigInt(data || 0));
-    }
-  });
+  }, [txReceipt]);
 
   // WAGMI BALANCES
 
@@ -229,31 +338,18 @@ export const useGeb = () => {
   const {} = useWaitForTransaction({
     hash: txReceipt,
     enabled: txReceipt !== '' ? true : false,
+    confirmations: 2,
     onSuccess() {
       setTxReceipt('');
       setTxReceiptPending(false);
-    }
-  });
-
-  useEffect(() => {
-    if (txReceipt !== '') {
       toast({
         position: 'bottom-left',
         render: () => (
-          <Box bg='white' borderRadius='5px' color='black' p={3}>
-            View{' '}
-            <ChakraLink
-              textDecoration='underline'
-              href={`${blockExplorerBaseUrl[chain?.id]}/tx/${txReceipt}`}
-              isExternal
-            >
-              Transaction
-            </ChakraLink>
-          </Box>
+          <TransactionAlert status='success' title='Transaction Mined' />
         )
       });
     }
-  }, [txReceipt]);
+  });
 
   const executeAsProxy = async (target, data) => {
     setTxReceiptPending(true);
@@ -277,39 +373,9 @@ export const useGeb = () => {
     }
   };
 
-  const updateSafeId = async (_safeId) => {
-    if (Number.isNaN(_safeId)) {
-      return;
-    }
+  const proxiedCollateralWithdraw = async (_safeId) => {
     try {
-      setSelectedSafeId(Number(_safeId));
-
-      const safeOwner = await publicClient.readContract({
-        address: gebSafeManagerContract,
-        abi: GEB_SAFE_MANAGER_ABI,
-        functionName: 'ownsSAFE',
-        args: [_safeId]
-      });
-      setSafeOwner(safeOwner);
-
-      const safeAddress = await publicClient.readContract({
-        address: gebSafeManagerContract,
-        abi: GEB_SAFE_MANAGER_ABI,
-        functionName: 'safes',
-        args: [_safeId]
-      });
-      setSafeAddress(safeAddress);
-    } catch (err) {
-      console.log('Error in updateSafeId', err);
-      setSafeOwner(zeroAddress);
-      setSafeAddress(zeroAddress);
-      setSelectedSafeId(null);
-    }
-  };
-
-  const proxiedCollateralWithdraw = async () => {
-    try {
-      if (!selectedSafeId) {
+      if (!_safeId) {
         throw new Error('No safe selected');
       }
 
@@ -320,7 +386,7 @@ export const useGeb = () => {
           gebSafeManagerContract,
           collateralJoinAddress,
           globalSettlementContract,
-          selectedSafeId
+          _safeId
         ]
       });
 
@@ -332,7 +398,7 @@ export const useGeb = () => {
 
   const proxiedPrepareSystemCoins = async (amount) => {
     try {
-      if (amount > systemCoinBalance) {
+      if (Number(amount) > Number(systemCoinBalance)) {
         throw new Error('Not enough system coins');
       }
 
@@ -352,12 +418,11 @@ export const useGeb = () => {
 
   const proxiedRedeemSystemCoins = async (amount) => {
     try {
-      if (amount > redeemableCoinBalance) {
+      if (Number(amount) > Number(redeemableCoinBalance)) {
         throw new Error('Not enough redeemable coins');
       }
 
       const amountInWei = parseEther(amount);
-
       const data = encodeFunctionData({
         abi: GEB_PROXY_ACTIONS_GLOBAL_SETTLEMENT_ABI,
         functionName: 'redeemTokenCollateral',
@@ -396,7 +461,6 @@ export const useGeb = () => {
   return {
     safesQueryResult,
     safesQueryLoading,
-    updateSafeId,
     safeAddress,
     safeOwner,
     collateralType,
@@ -414,6 +478,9 @@ export const useGeb = () => {
     approvedSystemCoin,
     collateralCashPrice,
     outstandingCoinSupply,
-    txReceiptPending
+    txReceiptPending,
+    fetchSafeAddress,
+    fetchSafeOwner,
+    showTxModal
   };
 };

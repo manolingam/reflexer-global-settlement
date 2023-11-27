@@ -11,6 +11,7 @@ import {
 } from '@web3modal/ethereum';
 import { Web3Modal } from '@web3modal/react';
 import { configureChains, createConfig, WagmiConfig } from 'wagmi';
+import { infuraProvider } from 'wagmi/providers/infura';
 import { sepolia } from 'wagmi/chains';
 import { ApolloProvider } from '@apollo/client';
 
@@ -24,7 +25,9 @@ const poppins = Poppins({ subsets: ['latin'], weight: '500' });
 const chains = [sepolia];
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_ID;
 
-const { publicClient } = configureChains(chains, [w3mProvider({ projectId })]);
+const { publicClient } = configureChains(chains, [
+  infuraProvider({ apiKey: process.env.NEXT_PUBLIC_INFURA_KEY })
+]);
 const wagmiConfig = createConfig({
   autoConnect: true,
   connectors: w3mConnectors({ projectId, chains }),

@@ -16,20 +16,22 @@ import { useState } from 'react';
 import { BalanceDisplay } from './BalanceDisplay';
 import { useGeb } from '../hooks/useGeb';
 import { tokenTickers, SYSTEM_COIN_ADDRESS } from '@/app/utils/contracts';
-import { formatLargeNumber } from '../utils/helpers';
 
-export const RedeemBox = () => {
-  const [redeeemInput, setRedeemInput] = useState(0);
+export const PrepareBox = () => {
+  const [prepareInput, setPrepareInput] = useState(0);
 
   const { address } = useAccount();
   const { chain } = useNetwork();
 
   const {
-    proxiedRedeemSystemCoins,
-    redeemableCoinBalance,
-    collateralCashPrice,
+    systemCoinBalance,
+    proxiedPrepareSystemCoins,
+    approveSystemCoin,
+    approvedSystemCoin,
     txReceiptPending
   } = useGeb();
+
+  const isApproved = Number(approvedSystemCoin) >= Number(prepareInput);
 
   return (
     <Flex
@@ -39,36 +41,42 @@ export const RedeemBox = () => {
       alignItems='center'
       w='100%'
     >
-      <SimpleGrid columns='1' gap='5' mr='auto' w='50%' mb='2rem'>
+      <SimpleGrid w='100%' columns='2' gap='5' mb='2rem'>
         <BalanceDisplay
-          amount={redeemableCoinBalance}
-          label='Redeemable Coin Balance'
+          amount={systemCoinBalance}
+          label='System Coin Balance'
+          symbol={tokenTickers[chain?.id]?.systemcoin}
+          borderColor='#41c1d0'
+        />{' '}
+        <BalanceDisplay
+          amount={approvedSystemCoin}
+          label='Approved System Coin Balance'
           symbol={tokenTickers[chain?.id]?.systemcoin}
           borderColor='#41c1d0'
         />
       </SimpleGrid>
 
-      <Box border='2px solid white' borderRadius='5px' p='1rem'>
+      <Box w='100%' border='2px solid white' borderRadius='5px' p='1rem'>
         <HStack mb='10px' alignItems='flex-end' justifyContent='space-between'>
           <Text fontSize='12px' opacity='0.8' textTransform='uppercase'>
-            Redeem System Coins
+            Prepare System Coins
           </Text>
           <Text fontSize='12px' opacity='0.8' textTransform='uppercase'>
-            Redeemable Balance:{' '}
+            Balance:{' '}
             {new Intl.NumberFormat('en-US', {
               style: 'decimal',
               minimumFractionDigits: 0
-            }).format(Number(redeemableCoinBalance))}
+            }).format(Number(systemCoinBalance))}
           </Text>
         </HStack>
         <HStack>
-          <NumberInput value={redeeemInput} defaultValue={0} min={0}>
+          <NumberInput value={prepareInput} defaultValue={0} min={0}>
             <NumberInputField
               bg='transparent'
               border='none'
               outline='none'
               fontSize='28px'
-              onChange={(e) => setRedeemInput(e.target.value)}
+              onChange={(e) => setPrepareInput(e.target.value)}
             />
           </NumberInput>
           <Text textTransform='uppercase' fontWeight='bold'>
@@ -81,22 +89,23 @@ export const RedeemBox = () => {
         <Button
           mt='1rem'
           bg='#41c1d0'
-          loadingText={'Transaction pending..'}
           isLoading={txReceiptPending}
-          isDisabled={
-            Number(redeeemInput) <= 0 ||
-            Number(redeeemInput) > Number(redeemableCoinBalance)
-          }
-          onClick={() => proxiedRedeemSystemCoins(redeeemInput)}
+          isDisabled={Number(prepareInput) <= 0}
+          loadingText={'Transaction pending..'}
           _hover={{
             opacity: 0.7
           }}
+          onClick={() => {
+            if (isApproved) proxiedPrepareSystemCoins(prepareInput);
+            else approveSystemCoin(prepareInput);
+          }}
         >
-          Redeem
+          {isApproved ? 'Prepare' : 'Approve'}
         </Button>
       ) : (
         <Text
-          mt='10px'
+          mt='5px'
+          mb='10px'
           mx='auto'
           fontSize='12px'
           opacity='0.7'
